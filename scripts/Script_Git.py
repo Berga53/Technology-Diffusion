@@ -17,7 +17,7 @@ from gurobipy import GRB
 
 
 # ============================================================
-Graph Generation
+#Graph Generation
 # ============================================================
 def preferential_attachment_variable_m(
     N: int,
@@ -61,7 +61,7 @@ def preferential_attachment_variable_m(
 
 
 # ============================================================
-G&L IP
+#G&L IP
 # ============================================================
 def build_golberg_liu_ip(G: nx.Graph, theta: dict):
     V = list(G.nodes())
@@ -98,7 +98,7 @@ def build_golberg_liu_ip(G: nx.Graph, theta: dict):
 
 
 # ============================================================
-Diffusion
+#Diffusion
 # ============================================================
 def connected_component_threshold_update_theta(g, active_mask, theta_vec):
     N = g.number_of_nodes()
@@ -192,7 +192,7 @@ def assign_thresholds_paper_experiments(G: nx.Graph, c: int, seed: int | None = 
 
 
 # ============================================================
-NS modificato
+#NS modificato
 
 # ============================================================
 def NS_marginal_gain_minconn_progressive(
@@ -431,7 +431,7 @@ def NS_marginal_gain_minconn_progressive(
 
 
 # ============================================================
-Generazione seedset iniziale
+#Generazione seedset iniziale
 # ============================================================
 def seeds_to_x0(N, seeds, h0=1.0):
     x0 = np.zeros(N, dtype=float)
@@ -543,7 +543,7 @@ def seedset_betweenness_connected(g: nx.Graph, k: int, rng: np.random.Generator,
 
 
 # ============================================================
-Seedset iniziale alternativo 
+#Seedset iniziale alternativo 
 # ============================================================
 def build_max_theta_heavy_connected_seedset(g: nx.Graph, theta_vec: np.ndarray, K: int, rng: np.random.Generator):
     n = g.number_of_nodes()
@@ -657,7 +657,7 @@ def generate_multistart_seedsets(
 
 
 # ============================================================
-Euristiche e run dell'esperimento 
+#Euristiche e run dell'esperimento 
 # ============================================================
 def run_solver_best_of_multistart(
     solver_fn,
@@ -741,7 +741,7 @@ def run_solver_best_of_multistart(
 
 
 # ============================================================
-Helpers
+#Helpers
 # ============================================================
 
 def _complete_seedset_by_adding_missing_max_theta(
@@ -1224,7 +1224,7 @@ def bisection_multistart(
     return best_k_bisect, df, best_solution_at_k.get(best_k_bisect)
 
 # ============================================================
-Euristiche
+#Euristiche
 # ============================================================
 def _cascade_fixpoint_mask(g: nx.Graph, active_mask: np.ndarray, theta_vec: np.ndarray, max_t: int = 999):
     t = 0
@@ -1408,9 +1408,7 @@ def spread_from_seeds(g, eval_fn, W, params, eval_kwargs, seeds, h0=1.0):
 
 
 # ============================================================
-
-MAIN
-
+#MAIN
 # ============================================================
 def main():
     OUTROOT = "./results_ns_ip_batch"
@@ -1426,7 +1424,7 @@ def main():
 
     K_SEEDS = 50
     DELTA = 0.5
-    XI = 0.0001
+    XI = 0.01
     D = 2
     MAX_TIME = 120
     BUFFER_DIM = 5000
