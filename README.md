@@ -7,7 +7,6 @@ bla bla bla
 - `src/technology_diffusion/`: core modules (`helpers`, `heuristics`, `ip_problems`, `ns`)
 - `experiments/`: experimental outputs and data summaries
 - `notebooks/`: Jupyter notebooks
-- `scripts/`: standalone scripts
 - `tests/`: test suite
 
 ## Setup
