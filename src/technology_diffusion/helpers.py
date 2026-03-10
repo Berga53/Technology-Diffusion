@@ -44,7 +44,7 @@ def create_pa_graph(
         raise ValueError("init_nodes must satisfy 2 <= init_nodes <= n_nodes")
 
     rng_graph = np.random.default_rng(seed)
-    rng_theta = np.random.default_rng(random.seed())
+    rng_theta = np.random.default_rng(seed)
 
     if init_mode == "complete":
         g = nx.complete_graph(init_nodes)
