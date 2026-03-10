@@ -43,7 +43,8 @@ def create_pa_graph(
     if not (2 <= init_nodes <= n_nodes):
         raise ValueError("init_nodes must satisfy 2 <= init_nodes <= n_nodes")
 
-    rng = np.random.default_rng(seed)
+    rng_graph = np.random.default_rng(seed)
+    rng_theta = np.random.default_rng(random.seed())
 
     if init_mode == "complete":
         g = nx.complete_graph(init_nodes)
@@ -56,18 +57,18 @@ def create_pa_graph(
 
     for u in range(init_nodes, n_nodes):
         g.add_node(u)
-        m = int(rng.choice(m_choices))
+        m = int(rng_graph.choice(m_choices))
         existing = np.array([v for v in g.nodes if v != u], dtype=int)
         m = min(m, len(existing))
         degrees = np.array([g.degree(v) for v in existing], dtype=float)
         probs = degrees / degrees.sum()
-        targets = rng.choice(existing, size=m, replace=False, p=probs)
+        targets = rng_theta.choice(existing, size=m, replace=False, p=probs)
         for v in targets:
             g.add_edge(u, int(v))
 
     k_max = int(np.ceil(n_nodes / c))
     values = list(range(max(2, c), k_max * c + 1, c))
-    theta = {v: int(rng.choice(values)) for v in g.nodes()}
+    theta = {v: int(rng_theta.choice(values)) for v in g.nodes()}
     nx.set_node_attributes(g, theta, name="theta")
     return g, theta
 
@@ -145,7 +146,7 @@ def connected_component_update(g: nx.Graph, active_mask: np.ndarray, thetas) -> 
 
         if touched:
             reachable = int(comp_sizes[list(touched)].sum())
-            if reachable >= int(thetas[v]):
+            if reachable >= (int(thetas[v])-1):
                 actives[v] = True
 
     return actives
@@ -173,7 +174,3 @@ def connected_component_spread(
     final_x = np.zeros(n_nodes, dtype=float)
     final_x[active] = 1.0
     return final_spread, spread_hist, final_x
-
-
-np.random.seed(42)
-random.seed(10)
