@@ -62,7 +62,7 @@ def create_pa_graph(
         m = min(m, len(existing))
         degrees = np.array([g.degree(v) for v in existing], dtype=float)
         probs = degrees / degrees.sum()
-        targets = rng_theta.choice(existing, size=m, replace=False, p=probs)
+        targets = rng_graph.choice(existing, size=m, replace=False, p=probs)
         for v in targets:
             g.add_edge(u, int(v))
 
