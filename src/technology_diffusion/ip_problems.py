@@ -1,4 +1,5 @@
 import time
+from typing import Any, Mapping, Optional
 
 import gurobipy as gp
 import networkx as nx
@@ -7,7 +8,11 @@ from gurobipy import GRB
 from .helpers import time_exceeded
 
 
-def build_golberg_liu_ip(g: nx.Graph, theta: dict, max_time=None):
+def build_golberg_liu_ip(
+    g: nx.Graph,
+    theta: Mapping[int, int],
+    max_time: Optional[float] = None,
+) -> tuple[Any | None, Any | None]:
     start_time = time.time()
     v = list(g.nodes())
     n = len(v)
@@ -50,7 +55,11 @@ def build_golberg_liu_ip(g: nx.Graph, theta: dict, max_time=None):
     return m, x
 
 
-def get_activation_sequence_and_seeds(g, theta, xvars):
+def get_activation_sequence_and_seeds(
+    g: nx.Graph,
+    theta: Mapping[int, int],
+    xvars: Any,
+) -> tuple[dict[int, int], list[int], list[int]]:
     v = list(g.nodes())
     n = len(v)
     t_of = {}
@@ -66,7 +75,14 @@ def get_activation_sequence_and_seeds(g, theta, xvars):
     return t_of, order, seeds
 
 
-def build_marta_ip(g: nx.Graph, theta: dict, k: int, use_simultaneous=True, time_horizon=None, max_time=None):
+def build_marta_ip(
+    g: nx.Graph,
+    theta: Mapping[int, int],
+    k: int,
+    use_simultaneous: bool = True,
+    time_horizon: Optional[int] = None,
+    max_time: Optional[float] = None,
+) -> tuple[Any | None, Any | None, Any | None, Any | None]:
     start_time = time.time()
     v = list(g.nodes())
     n_nodes = len(v)

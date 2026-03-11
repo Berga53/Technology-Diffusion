@@ -3,6 +3,7 @@ import itertools
 import math
 import time
 import random
+from typing import Callable, Deque, Mapping, Sequence
 
 import networkx as nx
 import numpy as np
@@ -10,7 +11,7 @@ import numpy as np
 from .helpers import connected_component_spread, time_exceeded
 
 
-def _max_comp_size_in_seedset(g, seedset):
+def _max_comp_size_in_seedset(g: nx.Graph, seedset: set[int]) -> int:
     if len(seedset) == 0:
         return 0
     if len(seedset) == 1:
@@ -19,21 +20,28 @@ def _max_comp_size_in_seedset(g, seedset):
     return max((len(c) for c in nx.connected_components(sub)), default=0)
 
 
-def _meets_min_connectedness(g, seedset, min_conn_req):
+def _meets_min_connectedness(g: nx.Graph, seedset: set[int], min_conn_req: int) -> bool:
     return _max_comp_size_in_seedset(g, seedset) >= int(min_conn_req)
 
 
-def _x_from_seedset(n_nodes, seedset):
+def _x_from_seedset(n_nodes: int, seedset: set[int]) -> np.ndarray:
     x = np.zeros(n_nodes)
     x[list(seedset)] = 1.0
     return x
 
 
-def _seedset_from_x(x):
+def _seedset_from_x(x: np.ndarray) -> set[int]:
     return set(np.nonzero(x)[0])
 
 
-def _print_ns_status(verbose, calls, start, max_time, spread, done=False):
+def _print_ns_status(
+    verbose: int,
+    calls: int,
+    start: float,
+    max_time: float,
+    spread: int,
+    done: bool = False,
+) -> None:
     if not verbose:
         return
     if done:
@@ -53,7 +61,7 @@ def _print_ns_status(verbose, calls, start, max_time, spread, done=False):
         )
 
 
-def _generate_swap_neighbors(g, idx):
+def _generate_swap_neighbors(g: nx.Graph, idx: set[int]) -> list[set[int]]:
     neighbors = []
     for elem1 in idx:
         for elem2 in set(g.neighbors(elem1)) - idx:
@@ -64,7 +72,7 @@ def _generate_swap_neighbors(g, idx):
     return neighbors
 
 
-def _generate_d_exchange_neighbors(n_nodes, idx, d):
+def _generate_d_exchange_neighbors(n_nodes: int, idx: set[int], d: int) -> list[set[int]]:
     neighbors = []
     idx_temp = set(range(n_nodes)) - idx
     for i in range(d // 2):
@@ -74,28 +82,32 @@ def _generate_d_exchange_neighbors(n_nodes, idx, d):
     return neighbors
 
 
-def _filter_feasible_neighbors(g, neighbors, min_conn):
+def _filter_feasible_neighbors(
+    g: nx.Graph,
+    neighbors: list[set[int]],
+    min_conn: int,
+) -> list[set[int]]:
     return [seedset for seedset in neighbors if _meets_min_connectedness(g, seedset, min_conn)]
 
 
 def _evaluate_neighbors(
-    g,
-    thetas,
-    neighbors,
-    s_base,
-    x_base,
-    n_nodes,
-    xi_t,
-    buffer,
-    calls,
-    stop,
-    history,
-    start,
-    max_time,
-    verbose,
-    target_spread,
-    early_break=True,
-):
+    g: nx.Graph,
+    thetas: Mapping[int, int] | np.ndarray,
+    neighbors: list[set[int]],
+    s_base: int,
+    x_base: np.ndarray,
+    n_nodes: int,
+    xi_t: float,
+    buffer: Deque[tuple[float, ...]],
+    calls: int,
+    stop: bool,
+    history: list[list[float]],
+    start: float,
+    max_time: float,
+    verbose: int,
+    target_spread: int,
+    early_break: bool = True,
+) -> tuple[bool, np.ndarray, int, int, bool]:
     s_temp = s_base
     x_temp = x_base
 
@@ -127,7 +139,12 @@ def _evaluate_neighbors(
     return False, x_temp, s_temp, calls, stop
 
 
-def _make_move_connected_seedset(g, seedset, v, k):
+def _make_move_connected_seedset(
+    g: nx.Graph,
+    seedset: set[int],
+    v: int,
+    k: int,
+) -> set[int] | None:
     v = int(v)
     if v in seedset:
         return None
@@ -180,23 +197,23 @@ def _make_move_connected_seedset(g, seedset, v, k):
 
 
 def _mg_phase(
-    g,
-    thetas,
-    idx,
-    n_nodes,
-    k,
-    s_base,
-    buffer,
-    calls,
-    history,
-    start,
-    max_time,
-    verbose,
-    target_spread,
-    min_conn,
-    mg_max_depth,
-    mg_memory_len,
-):
+    g: nx.Graph,
+    thetas: Mapping[int, int] | np.ndarray,
+    idx: set[int],
+    n_nodes: int,
+    k: int,
+    s_base: int,
+    buffer: Deque[tuple[float, ...]],
+    calls: int,
+    history: list[list[float]],
+    start: float,
+    max_time: float,
+    verbose: int,
+    target_spread: int,
+    min_conn: int,
+    mg_max_depth: int,
+    mg_memory_len: int,
+) -> tuple[bool, bool, np.ndarray, int, int, bool]:
     improved_mg = False
     stop = False
     x_temp = _x_from_seedset(n_nodes, idx)
@@ -310,19 +327,19 @@ def _mg_phase(
 
 
 def NS_matteo(
-    g,
-    thetas,
-    x0,
-    delta,
-    xi,
-    d,
-    max_time,
-    buffer_dim,
-    verbose=0,
-    min_conn=10,
-    mg_max_depth=2,
-    mg_memory_len=5,
-):
+    g: nx.Graph,
+    thetas: Mapping[int, int] | np.ndarray,
+    x0: np.ndarray,
+    delta: float,
+    xi: float,
+    d: int,
+    min_conn: int,
+    mg_max_depth: int,
+    mg_memory_len: int,
+    max_time: float,
+    buffer_dim: int,
+    verbose: int = 0,
+) -> tuple[list[int], list[np.ndarray], list[list[float]]]:
     n_nodes = len(x0)
     x_hist = [np.array(x0, dtype=float)]
 
@@ -474,7 +491,20 @@ def NS_matteo(
     _print_ns_status(verbose, calls, start, max_time, s_hist[-1], done=True)
     return s_hist, x_hist, history
 
-def NS_matteo_technology_diffusion_binary_search(g, thetas, strategy, delta, xi, d, max_time, buffer_dim, verbose=0):
+def NS_matteo_technology_diffusion_binary_search(
+    g: nx.Graph,
+    thetas: Mapping[int, int] | np.ndarray,
+    strategy: Sequence[Callable[..., np.ndarray]],
+    delta: float,
+    xi: float,
+    d: int,
+    min_conn: int,
+    mg_max_depth: int,
+    mg_memory_len: int,
+    max_time: float,
+    buffer_dim: int,
+    verbose: int = 0,
+) -> tuple[int | None, np.ndarray | None, float]:
     start = time.time()
     n_nodes = g.number_of_nodes()
     tried_k = set()
@@ -493,7 +523,7 @@ def NS_matteo_technology_diffusion_binary_search(g, thetas, strategy, delta, xi,
         tried_k.add(k)
 
         x = strategy[0](g, n_nodes, k, thetas=thetas, connected=1)
-        s, final_x, history = NS_matteo(g, thetas, x, delta, xi, d, max_time, buffer_dim, 0, min_conn, mg_max_depth, mg_size, mg_memory_len):
+        s, final_x, history = NS_matteo(g, thetas, x, delta, xi, d, min_conn, mg_max_depth, mg_memory_len, max_time, buffer_dim, 0)
         spread = s[-1]
         x_last = np.array(final_x[-1], dtype=float)
         times[k] = history[-1][1]

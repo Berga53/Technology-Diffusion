@@ -1,4 +1,5 @@
 import random
+from typing import Mapping
 
 import networkx as nx
 import numpy as np
@@ -6,7 +7,11 @@ import numpy as np
 from .helpers import connected_component_spread, make_subset_connected, make_vector
 
 
-def SingleDiscount(g, thetas, k):
+def SingleDiscount(
+    g: nx.Graph,
+    thetas: Mapping[int, int] | np.ndarray,
+    k: int,
+) -> tuple[int, np.ndarray]:
     w1 = nx.to_numpy_array(g)
     idx = []
     ddv = np.sum(w1 > 0, axis=0)
@@ -28,7 +33,13 @@ def SingleDiscount(g, thetas, k):
     return s, x
 
 
-def degree(g, n_nodes, k, thetas=None, connected=0):
+def degree(
+    g: nx.Graph,
+    n_nodes: int,
+    k: int,
+    thetas: Mapping[int, int] | None = None,
+    connected: int = 0,
+) -> np.ndarray:
     degs = np.array([g.degree(v) for v in g.nodes()])
     top_k = np.argsort(-degs)[:k]
     if connected:
@@ -36,7 +47,13 @@ def degree(g, n_nodes, k, thetas=None, connected=0):
     return make_vector(top_k, n_nodes)
 
 
-def degree_threshold(g, n_nodes, k, thetas=None, connected=0):
+def degree_threshold(
+    g: nx.Graph,
+    n_nodes: int,
+    k: int,
+    thetas: Mapping[int, int] | None = None,
+    connected: int = 0,
+) -> np.ndarray:
     dt = np.array([g.degree(v) for v in g.nodes()]) * np.array(list(thetas.values()))
     top_k = np.argsort(-dt)[:k]
     if connected:
@@ -44,7 +61,13 @@ def degree_threshold(g, n_nodes, k, thetas=None, connected=0):
     return make_vector(top_k, n_nodes)
 
 
-def betweenness(g, n_nodes, k, thetas=None, connected=0):
+def betweenness(
+    g: nx.Graph,
+    n_nodes: int,
+    k: int,
+    thetas: Mapping[int, int] | None = None,
+    connected: int = 0,
+) -> np.ndarray:
     bets = nx.betweenness_centrality(g)
     bet_values = np.array([bets[v] for v in g.nodes()])
     top_k = np.argsort(-bet_values)[:k]
@@ -53,7 +76,13 @@ def betweenness(g, n_nodes, k, thetas=None, connected=0):
     return make_vector(top_k, n_nodes)
 
 
-def degree_connected(g, n_nodes, k, thetas=None, connected=None):
+def degree_connected(
+    g: nx.Graph,
+    n_nodes: int,
+    k: int,
+    thetas: Mapping[int, int] | None = None,
+    connected: int | None = None,
+) -> np.ndarray:
     degs = np.array([g.degree(v) for v in g.nodes()])
     top_k = [np.argsort(-degs)[0]]
     neighbors = set(g.neighbors(top_k[0]))
@@ -70,7 +99,13 @@ def degree_connected(g, n_nodes, k, thetas=None, connected=None):
     return make_vector(top_k, n_nodes)
 
 
-def high_thetas_start(g, n_nodes, k, thetas=None, connected=1):
+def high_thetas_start(
+    g: nx.Graph,
+    n_nodes: int,
+    k: int,
+    thetas: Mapping[int, int] | None = None,
+    connected: int = 1,
+) -> np.ndarray:
     sorted_nodes = sorted(g.nodes(), key=lambda x: thetas[x], reverse=True)
     top_k = sorted_nodes[:k]
     if connected:
@@ -78,7 +113,13 @@ def high_thetas_start(g, n_nodes, k, thetas=None, connected=1):
     return make_vector(top_k, n_nodes)
 
 
-def SD_start(g, n_nodes, k, thetas=None, connected=1):
+def SD_start(
+    g: nx.Graph,
+    n_nodes: int,
+    k: int,
+    thetas: Mapping[int, int] | None = None,
+    connected: int = 1,
+) -> np.ndarray:
     _, x0 = SingleDiscount(g, thetas, k)
     if connected:
         x0 = make_vector(
@@ -88,7 +129,13 @@ def SD_start(g, n_nodes, k, thetas=None, connected=1):
     return x0
 
 
-def random_start(g, n_nodes, k, thetas=None, connected=1):
+def random_start(
+    g: nx.Graph,
+    n_nodes: int,
+    k: int,
+    thetas: Mapping[int, int] | None = None,
+    connected: int = 1,
+) -> np.ndarray:
     nodes = list(g.nodes())
     random.shuffle(nodes)
     top_k = nodes[:k]

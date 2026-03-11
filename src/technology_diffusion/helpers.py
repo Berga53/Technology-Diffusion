@@ -2,7 +2,7 @@ import os
 import sys
 import time
 import random
-from typing import Iterable, Optional
+from typing import Iterable, Mapping, Optional
 
 import networkx as nx
 import numpy as np
@@ -35,7 +35,7 @@ def create_pa_graph(
     seed: Optional[int] = None,
     init_nodes: Optional[int] = None,
     init_mode: str = "complete",
-):
+) -> tuple[nx.Graph, dict[int, int]]:
     if c <= 0:
         raise ValueError("c must be a positive integer.")
     if init_nodes is None:
@@ -73,7 +73,12 @@ def create_pa_graph(
     return g, theta
 
 
-def make_subset_connected(g: nx.Graph, x, use_thetas: int = 0, thetas=None):
+def make_subset_connected(
+    g: nx.Graph,
+    x: Iterable[int],
+    use_thetas: int = 0,
+    thetas: Mapping[int, int] | None = None,
+) -> tuple[int, ...]:
     s = set(x)
     while True:
         comps = list(nx.connected_components(g.subgraph(s)))
@@ -99,7 +104,11 @@ def make_subset_connected(g: nx.Graph, x, use_thetas: int = 0, thetas=None):
     return tuple(sorted(s))
 
 
-def connected_component_update(g: nx.Graph, active_mask: np.ndarray, thetas) -> np.ndarray:
+def connected_component_update(
+    g: nx.Graph,
+    active_mask: np.ndarray,
+    thetas: Mapping[int, int] | np.ndarray,
+) -> np.ndarray:
     n_nodes = g.number_of_nodes()
     actives = np.zeros(n_nodes, dtype=bool)
 
@@ -155,9 +164,9 @@ def connected_component_update(g: nx.Graph, active_mask: np.ndarray, thetas) -> 
 def connected_component_spread(
     g: nx.Graph,
     x0: np.ndarray,
-    thetas,
+    thetas: Mapping[int, int] | np.ndarray,
     max_t: int = 1000,
-):
+) -> tuple[int, list[int], np.ndarray]:
     n_nodes = g.number_of_nodes()
     active = (x0 > 0).astype(bool)
     spread_hist = [int(np.sum(active))]
