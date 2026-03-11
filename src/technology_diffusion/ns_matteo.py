@@ -1,6 +1,8 @@
 import collections
 import itertools
+import math
 import time
+import random
 
 import networkx as nx
 import numpy as np
@@ -193,7 +195,6 @@ def _mg_phase(
     target_spread,
     min_conn,
     mg_max_depth,
-    mg_size,
     mg_memory_len,
 ):
     improved_mg = False
@@ -320,7 +321,6 @@ def NS_matteo(
     verbose=0,
     min_conn=10,
     mg_max_depth=2,
-    mg_size=20,
     mg_memory_len=5,
 ):
     n_nodes = len(x0)
@@ -368,7 +368,6 @@ def NS_matteo(
             target_spread=target_spread,
             min_conn=min_conn,
             mg_max_depth=mg_max_depth,
-            mg_size=mg_size,
             mg_memory_len=mg_memory_len,
         )
         if mg_stop:
@@ -474,3 +473,78 @@ def NS_matteo(
     history.append([s_hist[-1], time.time() - start, calls])
     _print_ns_status(verbose, calls, start, max_time, s_hist[-1], done=True)
     return s_hist, x_hist, history
+
+def NS_matteo_technology_diffusion_binary_search(g, thetas, strategy, delta, xi, d, max_time, buffer_dim, verbose=0):
+    start = time.time()
+    n_nodes = g.number_of_nodes()
+    tried_k = set()
+    best_k = None
+    best_solution_x = None
+    top_k, bottom_k = n_nodes, 1
+    time_single = max_time / max(1, math.ceil(math.log2(n_nodes)))
+    times = {}
+    strategy_tried = {}
+    temp_x = {}
+
+    while bottom_k <= top_k and time.time() - start < max_time:
+        k = (top_k + bottom_k) // 2
+        if k in tried_k:
+            break
+        tried_k.add(k)
+
+        x = strategy[0](g, n_nodes, k, thetas=thetas, connected=1)
+        s, final_x, history = NS_matteo(g, thetas, x, delta, xi, d, max_time, buffer_dim, 0, min_conn, mg_max_depth, mg_size, mg_memory_len):
+        spread = s[-1]
+        x_last = np.array(final_x[-1], dtype=float)
+        times[k] = history[-1][1]
+        strategy_tried[k] = -1 if times[k] < 0.9 * time_single else 0
+        if strategy_tried[k] == -1:
+            temp_x[k] = x_last
+
+        if spread == n_nodes:
+            if best_k is None or k < best_k:
+                best_k = k
+                best_solution_x = x_last.copy()
+            top_k = k - 1
+        else:
+            inferred_success_k = k + (n_nodes - spread)
+            if best_k is None or inferred_success_k < best_k:
+                _, _, active_after = connected_component_spread(g, x_last, thetas, max_t=1000)
+                inferred_x = x_last.copy()
+                inferred_x[np.where(active_after == 0)[0]] = 1.0
+                best_k = inferred_success_k
+                best_solution_x = inferred_x
+
+            if inferred_success_k <= top_k:
+                top_k = inferred_success_k - 1
+            bottom_k = k + 1
+
+    random.seed(42)
+    while time.time() - start < max_time and best_k is not None and best_k > 1:
+        k = best_k - 1
+        if strategy_tried.get(k) is None:
+            strat = 0
+            x = strategy[strat](g, n_nodes, k, thetas=thetas, connected=1)
+        elif strategy_tried[k] == -1:
+            strat = 0
+            x = temp_x[k]
+        else:
+            strat = min(len(strategy) - 1, strategy_tried[k] + 1)
+            x = strategy[strat](g, n_nodes, k, thetas=thetas, connected=1)
+
+        remaining = max_time - (time.time() - start)
+        if remaining <= 0:
+            break
+
+        s, final_x, _ = NS_matteo(
+            g, thetas, x, delta, xi, d, min(time_single, remaining), buffer_dim, verbose=0
+        )
+        strategy_tried[k] = strat
+
+        if s[-1] == n_nodes:
+            best_k = k
+            best_solution_x = np.array(final_x[-1], dtype=float)
+        else:
+            break
+
+    return best_k, best_solution_x, round(float(time.time() - start), 4)

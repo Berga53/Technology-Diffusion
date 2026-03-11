@@ -211,4 +211,4 @@ def NS_technology_diffusion_binary_search(g, thetas, strategy, delta, xi, d, max
         else:
             break
 
-    return best_k, best_solution_x, time.time() - start
+    return best_k, best_solution_x, round(float(time.time() - start), 4)
