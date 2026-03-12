@@ -142,3 +142,26 @@ def random_start(
     if connected:
         top_k = list(make_subset_connected(g, top_k, use_thetas=1, thetas=thetas))
     return make_vector(top_k, n_nodes)
+
+
+def technology_diffusion_heuristics(
+    g: nx.Graph,
+    n_nodes: int,
+    thetas: Mapping[int, int] | None = None,
+    connected: int = 0,
+    heuristic: function = None,
+) -> tuple[np.ndarray, int]:
+    if heuristic is None:
+        heuristic = degree
+    k = 1
+    done = False
+    while not done and k <= n_nodes:
+        x = heuristic(g, n_nodes, k, thetas, connected)
+        s = connected_component_spread(g, x, thetas, max_t=1000)[0]
+
+        if s == n_nodes:
+            done = True
+        else:
+            k += 1
+
+    return x, k
