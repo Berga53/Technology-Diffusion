@@ -12,13 +12,14 @@ def build_golberg_liu_ip(
     g: nx.Graph,
     theta: Mapping[int, int],
     max_time: Optional[float] = None,
+    env: Optional[gp.Env] = None,
 ) -> tuple[Any | None, Any | None]:
     start_time = time.time()
     v = list(g.nodes())
     n = len(v)
     t_range = range(1, n + 1)
 
-    m = gp.Model("golberg_liu_ip")
+    m = gp.Model("golberg_liu_ip", env=env)
     x = m.addVars(v, t_range, vtype=GRB.BINARY, name="x")
 
     m.setObjective(
