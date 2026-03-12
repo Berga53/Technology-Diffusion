@@ -1,5 +1,5 @@
 import random
-from typing import Mapping
+from typing import Callable, Mapping
 
 import networkx as nx
 import numpy as np
@@ -148,8 +148,8 @@ def technology_diffusion_heuristics(
     g: nx.Graph,
     n_nodes: int,
     thetas: Mapping[int, int] | None = None,
-    connected: int = 0,
-    heuristic: function = None,
+    connected: int = 1,
+    heuristic: Callable[[nx.Graph, int, int, Mapping[int, int] | None, int], np.ndarray] | None = None,
 ) -> tuple[np.ndarray, int]:
     if heuristic is None:
         heuristic = degree

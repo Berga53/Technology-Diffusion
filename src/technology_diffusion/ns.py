@@ -491,6 +491,30 @@ def Neighbor_Search_td(
     _print_ns_status(verbose, calls, start, max_time, s_hist[-1], done=True)
     return s_hist, x_hist, history
 
+def _print_binary_search_status(
+    verbose: int,
+    k: int,
+    best_k: int | None,
+    start: float,
+    max_time: float,
+    done: bool = False,
+) -> None:
+    if not verbose:
+        return
+    if done:
+        print(
+            "\r"
+            + f"Binary search... Done! k:{k}. Time: {round(time.time()-start)}/{max_time} s. "
+            + " " * 20
+        )
+    else:
+        print(
+            "\r"
+            + f"Binary search... best k:{best_k}. Trying {k}. Time: {round(time.time()-start)}/{max_time} s. "
+            + " " * 20,
+            end="",
+        )
+
 def NS_technology_diffusion_binary_search(
     g: nx.Graph,
     thetas: Mapping[int, int] | np.ndarray,
@@ -504,7 +528,8 @@ def NS_technology_diffusion_binary_search(
     max_time: float,
     buffer_dim: int,
     verbose: int = 0,
-) -> tuple[int | None, np.ndarray | None, float]:
+) -> tuple[int | None, np.ndarray | None, float, list[tuple[int, float]]]:
+    
     start = time.time()
     n_nodes = g.number_of_nodes()
     tried_k = set()
@@ -515,18 +540,21 @@ def NS_technology_diffusion_binary_search(
     times = {}
     strategy_tried = {}
     temp_x = {}
+    history = [(n_nodes, 0.0)]
 
     while bottom_k <= top_k and time.time() - start < max_time:
         k = (top_k + bottom_k) // 2
         if k in tried_k:
             break
         tried_k.add(k)
-
+        
         x = strategy[0](g, n_nodes, k, thetas=thetas, connected=1)
-        s, final_x, history = Neighbor_Search_td(g, thetas, x, delta, xi, d, min_conn, mg_max_depth, mg_memory_len, max_time, buffer_dim, 0)
+
+        _print_binary_search_status(verbose, k, best_k, start, max_time, done=False)
+        s, final_x, history_ns = Neighbor_Search_td(g, thetas, x, delta, xi, d, min_conn, mg_max_depth, mg_memory_len, max_time, buffer_dim, 0)
         spread = s[-1]
         x_last = np.array(final_x[-1], dtype=float)
-        times[k] = history[-1][1]
+        times[k] = history_ns[-1][1]
         strategy_tried[k] = -1 if times[k] < 0.9 * time_single else 0
         if strategy_tried[k] == -1:
             temp_x[k] = x_last
@@ -535,6 +563,7 @@ def NS_technology_diffusion_binary_search(
             if best_k is None or k < best_k:
                 best_k = k
                 best_solution_x = x_last.copy()
+                history.append((best_k, round(time.time() - start, 4)))
             top_k = k - 1
         else:
             inferred_success_k = k + (n_nodes - spread)
@@ -544,7 +573,7 @@ def NS_technology_diffusion_binary_search(
                 inferred_x[np.where(active_after == 0)[0]] = 1.0
                 best_k = inferred_success_k
                 best_solution_x = inferred_x
-
+                history.append((best_k, round(time.time() - start, 4)))
             if inferred_success_k <= top_k:
                 top_k = inferred_success_k - 1
             bottom_k = k + 1
@@ -565,16 +594,19 @@ def NS_technology_diffusion_binary_search(
         remaining = max_time - (time.time() - start)
         if remaining <= 0:
             break
-
-        s, final_x, _ = Neighbor_Search_td(
-            g, thetas, x, delta, xi, d, min(time_single, remaining), buffer_dim, verbose=0
-        )
+        
+        _print_binary_search_status(verbose, k, best_k, start, max_time, done=False)
+        s, final_x, _ = Neighbor_Search_td(g, thetas, x, delta, xi, d, min_conn, mg_max_depth, mg_memory_len, max_time, buffer_dim, 0)
         strategy_tried[k] = strat
 
         if s[-1] == n_nodes:
             best_k = k
             best_solution_x = np.array(final_x[-1], dtype=float)
+            history.append((best_k, round(time.time() - start, 4)))
         else:
-            break
+            continue
+    
+    history.append((best_k, round(time.time() - start, 4)))
+    _print_binary_search_status(verbose, k, best_k, start, max_time, done=True)
 
-    return best_k, best_solution_x, round(float(time.time() - start), 4)
+    return best_k, best_solution_x, round(float(time.time() - start), 4), history
