@@ -504,7 +504,7 @@ def _print_binary_search_status(
     if done:
         print(
             "\r"
-            + f"Binary search... Done! k:{k}. Time: {round(time.time()-start)}/{max_time} s. "
+            + f"Binary search... Done! k:{best_k}. Time: {round(time.time()-start)}/{max_time} s. "
             + " " * 20
         )
     else:
@@ -596,7 +596,7 @@ def NS_technology_diffusion_binary_search(
             break
         
         _print_binary_search_status(verbose, k, best_k, start, max_time, done=False)
-        s, final_x, _ = Neighbor_Search_td(g, thetas, x, delta, xi, d, min_conn, mg_max_depth, mg_memory_len, max_time, buffer_dim, 0)
+        s, final_x, _ = Neighbor_Search_td(g, thetas, x, delta, xi, d, min_conn, mg_max_depth, mg_memory_len, min(remaining, max_time), buffer_dim, 0)
         strategy_tried[k] = strat
 
         if s[-1] == n_nodes:

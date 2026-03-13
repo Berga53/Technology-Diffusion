@@ -1,0 +1,76 @@
+
+Gurobi 13.0.1 (mac64[arm], Python) logging started Fri Mar 13 10:09:40 2026
+
+Set parameter LogToConsole to value 0
+Set parameter Username
+Set parameter LicenseID to value 2777966
+Set parameter LogFile to value "/Users/matteobergamaschi/Desktop/td_git/experiments/technology diffusion/gurobi.log"
+Academic license - for non-commercial use only - expires 2027-02-11
+Set parameter TimeLimit to value 6.1721520423889160e+00
+Gurobi Optimizer version 13.0.1 build v13.0.1rc0 (mac64[arm] - Darwin 25.3.0 25D2128)
+
+CPU model: Apple M4
+Thread count: 10 physical cores, 10 logical processors, using up to 10 threads
+
+Non-default parameters:
+TimeLimit  6.1721520423889160e+00
+LogToConsole  0
+
+Optimize a model with 40200 rows, 40000 columns and 20258600 nonzeros (Min)
+Model fingerprint: 0x782b52a6
+Model has 21037 linear objective coefficients
+Variable types: 0 continuous, 40000 integer (40000 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 1e+00]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 1e+00]
+
+Found heuristic solution: objective 102.0000000
+Presolve removed 200 rows and 0 columns (presolve time = 5s)...
+Presolve removed 200 rows and 0 columns
+Presolve time: 6.00s
+
+Explored 0 nodes (0 simplex iterations) in 6.20 seconds (33.93 work units)
+Thread count was 1 (of 10 available processors)
+
+Solution count 1: 102 
+
+Time limit reached
+Best objective 1.020000000000e+02, best bound -, gap -
+
+User-callback calls 1875, time in user-callback 0.00 sec
+Set parameter TimeLimit to value 6.0046317577362061e+00
+Gurobi Optimizer version 13.0.1 build v13.0.1rc0 (mac64[arm] - Darwin 25.3.0 25D2128)
+
+CPU model: Apple M4
+Thread count: 10 physical cores, 10 logical processors, using up to 10 threads
+
+Non-default parameters:
+TimeLimit  6.0046317577362061e+00
+LogToConsole  0
+
+Optimize a model with 40200 rows, 40000 columns and 20577000 nonzeros (Min)
+Model fingerprint: 0xb104005f
+Model has 20553 linear objective coefficients
+Variable types: 0 continuous, 40000 integer (40000 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 1e+00]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 1e+00]
+
+Found heuristic solution: objective 105.0000000
+Presolve removed 200 rows and 0 columns (presolve time = 5s)...
+Presolve removed 200 rows and 0 columns
+Presolve time: 5.85s
+
+Explored 0 nodes (0 simplex iterations) in 6.04 seconds (31.98 work units)
+Thread count was 1 (of 10 available processors)
+
+Solution count 1: 105 
+
+Time limit reached
+Best objective 1.050000000000e+02, best bound -, gap -
+
+User-callback calls 1744, time in user-callback 0.00 sec
