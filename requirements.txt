@@ -1,4 +1,4 @@
-gurobipy
-networkx
-numpy
-pandas
+gurobipy==13.0.1
+networkx==3.6.1
+numpy==2.4.2
+pandas==3.0.1
