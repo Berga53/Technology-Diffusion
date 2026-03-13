@@ -1,6 +1,7 @@
 import argparse
 import itertools
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -35,10 +36,44 @@ DEFAULT_C_LIST = [1, 5, 10, 20]
 DEFAULT_N_LIST = [200, 400, 600, 1000, 2000]
 DEFAULT_SEED_LIST = [1, 42, 53, 99, 101]
 
-DEFAULT_C_LIST = [1]
-DEFAULT_N_LIST = [200]
-DEFAULT_SEED_LIST = [1, 42]
 
+def _format_values_for_name(prefix: str, values: list[int]) -> str:
+    if not values:
+        return f"{prefix}-none"
+    unique_values = sorted(set(values))
+    if len(unique_values) == 1:
+        return f"{prefix}-{unique_values[0]}"
+    joined = "-".join(str(value) for value in unique_values)
+    return f"{prefix}s-{joined}"
+
+
+def _sanitize_label(label: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", label.strip()).strip("-_.")
+
+
+def build_run_tag(args: argparse.Namespace) -> str:
+    parts = [_format_values_for_name("seed", args.seed_list)]
+    if args.run_label:
+        sanitized = _sanitize_label(args.run_label)
+        if sanitized:
+            parts.append(sanitized)
+    return "__".join(parts)
+
+
+def add_tag_to_path(path: Path, tag: str) -> Path:
+    return path.with_name(f"{path.stem}__{tag}{path.suffix}")
+
+
+def resolve_output_paths(args: argparse.Namespace) -> tuple[Path, Path, Path]:
+    if not args.auto_name_outputs:
+        return args.results_csv_path, args.gurobi_log_path, args.static_params_path
+
+    run_tag = build_run_tag(args)
+    return (
+        add_tag_to_path(args.results_csv_path, run_tag),
+        add_tag_to_path(args.gurobi_log_path, run_tag),
+        add_tag_to_path(args.static_params_path, run_tag),
+    )
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the technology diffusion experiment.")
@@ -76,6 +111,18 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=RESULTS / "technology_diffusion_static_params.json",
     )
+    parser.add_argument(
+        "--run-label",
+        type=str,
+        default="",
+        help="Optional label appended to output file names, useful for reruns of the same batch.",
+    )
+    parser.add_argument(
+        "--auto-name-outputs",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Append a tag derived from n/c/seed selections to output file names.",
+    )
     parser.add_argument("--save-results-csv", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--save-gurobi-log", action=argparse.BooleanOptionalAction, default=True)
     return parser.parse_args()
@@ -105,19 +152,22 @@ def configure_gurobi_env(save_gurobi_log: bool, gurobi_log_path: Path) -> gp.Env
 def main() -> None:
     args = parse_args()
     strategy = build_strategy()
+    results_csv_path, gurobi_log_path, static_params_path = resolve_output_paths(args)
 
     combinations = list(itertools.product(args.n_list, args.c_list, args.seed_list))
 
     print(f"Total runs: {len(combinations)}")
+    print(f"Results CSV: {results_csv_path}")
+    print(f"Gurobi log: {gurobi_log_path}")
+    print(f"Static params: {static_params_path}")
     results = []
     start_all = time.time()
-    gurobi_env = configure_gurobi_env(args.save_gurobi_log, args.gurobi_log_path)
+    gurobi_env = configure_gurobi_env(args.save_gurobi_log, gurobi_log_path)
 
     try:
         for run_idx, (n_nodes, c, seed) in enumerate(combinations, start=1):
             max_time = args.max_time_scale * (n_nodes // 100)
-            max_time = 10
-
+            
             print("\n" + "=" * 90)
             print(
                 f"Run {run_idx}/{len(combinations)} | "
@@ -253,8 +303,8 @@ def main() -> None:
     print(f"Completed {len(results_df)} runs in {round(elapsed_all, 2)} seconds.")
 
     if args.save_results_csv:
-        results_df.to_csv(args.results_csv_path, index=False)
-        print(f"Results saved to: {args.results_csv_path}")
+        results_df.to_csv(results_csv_path, index=False)
+        print(f"Results saved to: {results_csv_path}")
 
     static_params = {
         "init_nodes": args.init_nodes,
@@ -271,12 +321,12 @@ def main() -> None:
         "strategy_names": [fn.__name__ for fn in strategy],
     }
 
-    with args.static_params_path.open("w", encoding="utf-8") as file:
+    with static_params_path.open("w", encoding="utf-8") as file:
         json.dump(static_params, file, indent=2)
-    print(f"Static parameters saved to: {args.static_params_path}")
+    print(f"Static parameters saved to: {static_params_path}")
 
     if args.save_gurobi_log:
-        print(f"Gurobi log saved to: {args.gurobi_log_path}")
+        print(f"Gurobi log saved to: {gurobi_log_path}")
 
 
 if __name__ == "__main__":
