@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import collections
 import itertools
 import math
@@ -226,10 +224,16 @@ def _mg_phase(
     tried_add_nodes = set()
 
     for u_sel in list(idx):
+        if time_exceeded(start, max_time):
+            stop = True
+            break
         visited = {int(u_sel)}
         frontier = {int(u_sel)}
 
         for radius in range(1, h + 1):
+            if time_exceeded(start, max_time):
+                stop = True
+                break
             next_frontier = set()
             for u in frontier:
                 for v in g.neighbors(u):
@@ -549,11 +553,15 @@ def NS_technology_diffusion_binary_search(
         if k in tried_k:
             break
         tried_k.add(k)
+
+        remaining = max_time - (time.time() - start)
+        if remaining <= 0:
+            break
         
         x = strategy[0](g, n_nodes, k, thetas=thetas, connected=1)
 
         _print_binary_search_status(verbose, k, best_k, start, max_time, done=False)
-        s, final_x, history_ns = Neighbor_Search_td(g, thetas, x, delta, xi, d, min_conn, mg_max_depth, mg_memory_len, max_time, buffer_dim, 0)
+        s, final_x, history_ns = Neighbor_Search_td(g, thetas, x, delta, xi, d, min_conn, mg_max_depth, mg_memory_len, min(remaining, max_time), buffer_dim, 0)
         spread = s[-1]
         x_last = np.array(final_x[-1], dtype=float)
         times[k] = history_ns[-1][1]
