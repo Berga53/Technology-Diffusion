@@ -97,6 +97,12 @@ def parse_args() -> argparse.Namespace:
         help="Per-run time limit scale used as max_time_scale * (n_nodes // 100).",
     )
     parser.add_argument(
+        "--skip-gurobi-from-n",
+        type=int,
+        default=1000,
+        help="Skip Goldberg-Liu IP build/optimize for runs with n_nodes >= this threshold.",
+    )
+    parser.add_argument(
         "--results-csv-path",
         type=Path,
         default=RESULTS / "technology_diffusion_results.csv",
@@ -167,6 +173,7 @@ def main() -> None:
     try:
         for run_idx, (n_nodes, c, seed) in enumerate(combinations, start=1):
             max_time = args.max_time_scale * (n_nodes // 100)
+            model = None
             
             print("\n" + "=" * 90)
             print(
@@ -182,23 +189,10 @@ def main() -> None:
                 init_mode=args.init_mode,
             )
 
-            print("Building Goldberg-Liu IP...", end="")
-            start = time.time()
-            model, x = build_golberg_liu_ip(g, thetas, max_time, env=gurobi_env)
-            build_time = time.time() - start
-
-            gl_history = [(n_nodes, 0.0)]
-
-            def gl_callback(model: gp.Model, where: int) -> None:
-                if where == gp.GRB.Callback.MIPSOL:
-                    obj = model.cbGet(gp.GRB.Callback.MIPSOL_OBJ)
-                    runtime = model.cbGet(gp.GRB.Callback.RUNTIME)
-                    gl_history.append([int(round(obj)), round(runtime + build_time, 4)])
-
-            if max_time - build_time < 0:
+            gl_skipped_for_size = n_nodes >= args.skip_gurobi_from_n
+            if gl_skipped_for_size:
                 print(
-                    f"\rGoldberg-Liu IP build failed: build time {round(build_time, 2)}s exceeds max time {max_time}s."
-                    + " " * 20
+                    f"Skipping Goldberg-Liu IP for N={n_nodes} (threshold: {args.skip_gurobi_from_n})."
                 )
                 gl_build_failed = True
                 gl_build_time = None
@@ -206,25 +200,51 @@ def main() -> None:
                 gl_runtime = None
                 gl_k = None
                 gl_history_json = json.dumps([])
+                x = None
             else:
-                print(f"\rGoldberg-Liu IP built in {round(build_time, 2)} seconds!" + " " * 20)
-                print(f"Solving Goldberg-Liu IP with time limit {round(max_time - build_time, 2)} seconds...", end="")
-                suppress_print()
-                model.setParam("TimeLimit", max_time - build_time)
-                resume_print()
-                model.optimize(gl_callback)
-                print(f"\rGoldberg-Liu IP solved in {round(model.Runtime, 2)} seconds!" + " " * 20)
+                print("Building Goldberg-Liu IP...", end="")
+                start = time.time()
+                model, x = build_golberg_liu_ip(g, thetas, max_time, env=gurobi_env)
+                build_time = time.time() - start
 
-                gl_build_failed = False
-                gl_build_time = round(build_time, 4)
-                gl_opt_time = round(float(model.Runtime), 4)
-                gl_runtime = round(build_time + gl_opt_time, 4)
-                gl_k = int(round(model.objVal)) if model.SolCount > 0 else None
-                if model.SolCount > 0:
-                    gl_history.append([gl_k, gl_runtime])
-                    gl_history_json = json.dumps(gl_history)
-                else:
+                gl_history = [(n_nodes, 0.0)]
+
+                def gl_callback(model: gp.Model, where: int) -> None:
+                    if where == gp.GRB.Callback.MIPSOL:
+                        obj = model.cbGet(gp.GRB.Callback.MIPSOL_OBJ)
+                        runtime = model.cbGet(gp.GRB.Callback.RUNTIME)
+                        gl_history.append([int(round(obj)), round(runtime + build_time, 4)])
+
+                if max_time - build_time < 0:
+                    print(
+                        f"\rGoldberg-Liu IP build failed: build time {round(build_time, 2)}s exceeds max time {max_time}s."
+                        + " " * 20
+                    )
+                    gl_build_failed = True
+                    gl_build_time = None
+                    gl_opt_time = None
+                    gl_runtime = None
+                    gl_k = None
                     gl_history_json = json.dumps([])
+                else:
+                    print(f"\rGoldberg-Liu IP built in {round(build_time, 2)} seconds!" + " " * 20)
+                    print(f"Solving Goldberg-Liu IP with time limit {round(max_time - build_time, 2)} seconds...", end="")
+                    suppress_print()
+                    model.setParam("TimeLimit", max_time - build_time)
+                    resume_print()
+                    model.optimize(gl_callback)
+                    print(f"\rGoldberg-Liu IP solved in {round(model.Runtime, 2)} seconds!" + " " * 20)
+
+                    gl_build_failed = False
+                    gl_build_time = round(build_time, 4)
+                    gl_opt_time = round(float(model.Runtime), 4)
+                    gl_runtime = round(build_time + gl_opt_time, 4)
+                    gl_k = int(round(model.objVal)) if model.SolCount > 0 else None
+                    if model.SolCount > 0:
+                        gl_history.append([gl_k, gl_runtime])
+                        gl_history_json = json.dumps(gl_history)
+                    else:
+                        gl_history_json = json.dumps([])
 
             ns_k, final_x, ns_runtime, ns_history = NS_technology_diffusion_binary_search(
                 g,
@@ -266,12 +286,19 @@ def main() -> None:
             )
 
             if gl_build_failed:
-                print("Goldberg-Liu -> Build failed.")
+                if gl_skipped_for_size:
+                    print("Goldberg-Liu -> Skipped for size threshold.")
+                else:
+                    print("Goldberg-Liu -> Build failed.")
             else:
                 print(f"Goldberg-Liu -> K={gl_k}, runtime={round(gl_runtime, 2)}s")
             print(f"NS Binary    -> K={ns_k}, runtime={round(float(ns_runtime), 2)}s, gap(NS-GL)={gap}")
 
-            del x
+            if x is not None:
+                del x
+            if model is not None:
+                model.dispose()
+                del model
             del final_x
     finally:
         gurobi_env.dispose()
@@ -318,6 +345,7 @@ def main() -> None:
         "mg_memory_len": args.mg_memory_len,
         "verbose": args.verbose,
         "max_time_scale": args.max_time_scale,
+        "skip_gurobi_from_n": args.skip_gurobi_from_n,
         "strategy_names": [fn.__name__ for fn in strategy],
     }
 

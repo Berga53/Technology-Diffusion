@@ -1,0 +1,23 @@
+{
+  "init_nodes": 5,
+  "init_mode": "complete",
+  "delta": 0.5,
+  "xi": 0.1,
+  "d": 2,
+  "buffer_dim": 5000,
+  "min_conn": 20,
+  "mg_max_depth": 5,
+  "mg_memory_len": 10,
+  "verbose": 1,
+  "max_time_scale": 180.0,
+  "skip_gurobi_from_n": 1000,
+  "strategy_names": [
+    "degree_threshold",
+    "high_thetas_start",
+    "SD_start",
+    "degree_connected",
+    "degree",
+    "betweenness",
+    "random_start"
+  ]
+}
