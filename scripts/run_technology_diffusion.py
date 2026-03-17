@@ -19,22 +19,35 @@ RESULTS.mkdir(parents=True, exist_ok=True)
 
 from technology_diffusion import (
     NS_technology_diffusion_binary_search,
-    SD_start,
+    degree_discount,
     betweenness,
     build_golberg_liu_ip,
     create_pa_graph,
     degree,
     degree_connected,
     degree_threshold,
-    high_thetas_start,
+    high_thetas,
     random_start,
-    resume_print,
-    suppress_print,
+    technology_diffusion_heuristics,
 )
 
 DEFAULT_C_LIST = [1, 5, 10, 20]
 DEFAULT_N_LIST = [200, 400, 600, 1000, 2000]
 DEFAULT_SEED_LIST = [1, 42, 53, 99, 101]
+
+ALGORITHM_LABEL_WIDTH = 34
+K_VALUE_WIDTH = 3
+TIME_VALUE_WIDTH = 7
+
+
+def print_algorithm_line(algorithm: str, message: str) -> None:
+    print(f"{algorithm:<{ALGORITHM_LABEL_WIDTH}} | {message}")
+
+
+def format_k_time(k_value: int | None, total_time: float | None) -> str:
+    k_text = "None" if k_value is None else str(k_value)
+    time_text = "None" if total_time is None else f"{total_time:.2f}s"
+    return f"k: {k_text:>{K_VALUE_WIDTH}} | time: {time_text:>{TIME_VALUE_WIDTH}}"
 
 
 def _format_values_for_name(prefix: str, values: list[int]) -> str:
@@ -75,13 +88,19 @@ def resolve_output_paths(args: argparse.Namespace) -> tuple[Path, Path, Path]:
         add_tag_to_path(args.static_params_path, run_tag),
     )
 
+
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the technology diffusion experiment.")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Run deterministic heuristics, Goldberg-Liu, and NS for the technology diffusion experiment."
+        )
+    )
     parser.add_argument("--c-list", type=int, nargs="+", default=DEFAULT_C_LIST)
     parser.add_argument("--n-list", type=int, nargs="+", default=DEFAULT_N_LIST)
     parser.add_argument("--seed-list", type=int, nargs="+", default=DEFAULT_SEED_LIST)
     parser.add_argument("--init-nodes", type=int, default=5)
     parser.add_argument("--init-mode", choices=["complete", "tree"], default="complete")
+    parser.add_argument("--connected", type=int, default=1)
     parser.add_argument("--delta", type=float, default=0.5)
     parser.add_argument("--xi", type=float, default=0.1)
     parser.add_argument("--d", type=int, default=2)
@@ -100,12 +119,12 @@ def parse_args() -> argparse.Namespace:
         "--skip-gurobi-from-n",
         type=int,
         default=1000,
-        help="Skip Goldberg-Liu IP build/optimize for runs with n_nodes >= this threshold.",
+        help="Skip Goldberg-Liu optimize for runs with n_nodes >= this threshold.",
     )
     parser.add_argument(
         "--results-csv-path",
         type=Path,
-        default=RESULTS / "technology_diffusion_results.csv",
+        default=RESULTS / "technology_diffusion_combined_results.csv",
     )
     parser.add_argument(
         "--gurobi-log-path",
@@ -115,7 +134,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--static-params-path",
         type=Path,
-        default=RESULTS / "technology_diffusion_static_params.json",
+        default=RESULTS / "technology_diffusion_combined_static_params.json",
     )
     parser.add_argument(
         "--run-label",
@@ -127,22 +146,33 @@ def parse_args() -> argparse.Namespace:
         "--auto-name-outputs",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Append a tag derived from n/c/seed selections to output file names.",
+        help="Append a tag derived from seed selections to output file names.",
     )
     parser.add_argument("--save-results-csv", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--save-gurobi-log", action=argparse.BooleanOptionalAction, default=True)
     return parser.parse_args()
 
 
-def build_strategy() -> list:
+def build_ns_strategy() -> list:
     return [
-        high_thetas_start,
+        high_thetas,
         degree_threshold,
-        SD_start,
+        degree_discount,
         degree_connected,
         degree,
         betweenness,
         random_start,
+    ]
+
+
+def build_heuristics() -> list:
+    return [
+        degree_threshold,
+        high_thetas,
+        degree_discount,
+        degree_connected,
+        degree,
+        betweenness,
     ]
 
 
@@ -151,22 +181,133 @@ def configure_gurobi_env(save_gurobi_log: bool, gurobi_log_path: Path) -> gp.Env
     gurobi_env.setParam("OutputFlag", 1 if save_gurobi_log else 0)
     gurobi_env.setParam("LogToConsole", 0)
     gurobi_env.setParam("LogFile", str(gurobi_log_path) if save_gurobi_log else "")
-    gurobi_env.setParam("Presolve", 0)
     gurobi_env.start()
     return gurobi_env
 
 
+def append_result(
+    rows: list[list],
+    algorithm: str,
+    n_nodes: int,
+    c: int,
+    seed: int,
+    total_time: float | None,
+    k_value: int | None,
+    history: list | None,
+) -> None:
+    rows.append(
+        [
+            algorithm,
+            n_nodes,
+            c,
+            seed,
+            total_time,
+            k_value,
+            json.dumps(history if history is not None else None),
+        ]
+    )
+
+
+def run_goldberg_liu(
+    g,
+    thetas,
+    n_nodes: int,
+    c: int,
+    seed: int,
+    max_time: float,
+    skip_gurobi_from_n: int,
+    gurobi_env: gp.Env,
+) -> tuple[float | None, int | None, list | None]:
+    if n_nodes >= skip_gurobi_from_n:
+        print(f"Skipping Goldberg-Liu IP for N={n_nodes} (threshold: {skip_gurobi_from_n}).")
+        print_algorithm_line(
+            "goldberg_liu",
+            f"{format_k_time(None, None)} | skipped for N={n_nodes} (threshold={skip_gurobi_from_n})",
+        )
+        return None, None, None
+
+    gl_start = time.time()
+    print("Building Goldberg-Liu IP...", end="", flush=True)
+    model, _ = build_golberg_liu_ip(g, thetas, max_time, env=gurobi_env)
+    build_time = time.time() - gl_start
+
+    if model is None:
+        print(
+            f"\rGoldberg-Liu IP build failed: time limit reached during model construction ({round(build_time, 2)}s)."
+            + " " * 20
+        )
+        print_algorithm_line(
+            "goldberg_liu",
+            f"{format_k_time(None, None)} | build failed (time limit reached during model construction)",
+        )
+        return None, None, None
+
+    print(f"\rGoldberg-Liu IP built in {round(build_time, 2)} seconds!" + " " * 20)
+
+    gl_history = [[n_nodes, 0.0]]
+
+    def gl_callback(callback_model: gp.Model, where: int) -> None:
+        if where == gp.GRB.Callback.MIPSOL:
+            obj = callback_model.cbGet(gp.GRB.Callback.MIPSOL_OBJ)
+            runtime = callback_model.cbGet(gp.GRB.Callback.RUNTIME)
+            gl_history.append([int(round(obj)), round(runtime + build_time, 4)])
+
+    remaining = max_time - build_time
+    if remaining <= 0:
+        model.dispose()
+        print(
+            f"Goldberg-Liu IP build failed: build time {round(build_time, 2)}s exceeds max time {round(max_time, 2)}s."
+        )
+        print_algorithm_line(
+            "goldberg_liu",
+            f"{format_k_time(None, None)} | build time exceeded max time ({round(build_time, 2)}s > {round(max_time, 2)}s)",
+        )
+        return None, None, None
+
+    model.setParam("TimeLimit", remaining)
+    print(
+        f"Solving Goldberg-Liu IP with time limit {round(remaining, 2)} seconds...",
+        end="",
+        flush=True,
+    )
+    model.optimize(gl_callback)
+    print(f"\rGoldberg-Liu IP solved in {round(float(model.Runtime), 2)} seconds!" + " " * 20)
+
+    if model.SolCount > 0:
+        gl_k = int(round(model.objVal))
+        total_time = round(float(time.time() - gl_start), 4)
+        gl_history.append([gl_k, total_time])
+        print_algorithm_line(
+            "goldberg_liu",
+            format_k_time(gl_k, total_time),
+        )
+    else:
+        gl_k = None
+        total_time = None
+        gl_history = None
+        print_algorithm_line(
+            "goldberg_liu",
+            f"{format_k_time(None, None)} | no feasible solution found",
+        )
+
+    model.dispose()
+    return total_time, gl_k, gl_history
+
+
 def main() -> None:
     args = parse_args()
-    strategy = build_strategy()
+    ns_strategy = build_ns_strategy()
+    heuristics = build_heuristics()
     results_csv_path, gurobi_log_path, static_params_path = resolve_output_paths(args)
 
     combinations = list(itertools.product(args.n_list, args.c_list, args.seed_list))
 
-    print(f"Total runs: {len(combinations)}")
+    print(f"Total graph runs: {len(combinations)}")
+    print(f"Deterministic heuristics: {len(heuristics)}")
     print(f"Results CSV: {results_csv_path}")
     print(f"Gurobi log: {gurobi_log_path}")
     print(f"Static params: {static_params_path}")
+
     results = []
     start_all = time.time()
     gurobi_env = configure_gurobi_env(args.save_gurobi_log, gurobi_log_path)
@@ -174,8 +315,7 @@ def main() -> None:
     try:
         for run_idx, (n_nodes, c, seed) in enumerate(combinations, start=1):
             max_time = args.max_time_scale * (n_nodes // 100)
-            model = None
-            
+
             print("\n" + "=" * 90)
             print(
                 f"Run {run_idx}/{len(combinations)} | "
@@ -200,65 +340,55 @@ def main() -> None:
                 init_mode=args.init_mode,
             )
 
-            gl_skipped_for_size = n_nodes >= args.skip_gurobi_from_n
-            if gl_skipped_for_size:
-                print(
-                    f"Skipping Goldberg-Liu IP for N={n_nodes} (threshold: {args.skip_gurobi_from_n})."
+            for heuristic_fn in heuristics:
+                h_name = heuristic_fn.__name__
+                _, h_k, h_runtime, h_history = technology_diffusion_heuristics(
+                    g,
+                    n_nodes,
+                    thetas=thetas,
+                    connected=args.connected,
+                    heuristic=heuristic_fn,
                 )
-                gl_build_failed = True
-                gl_build_time = None
-                gl_opt_time = None
-                gl_runtime = None
-                gl_k = None
-                gl_history_json = json.dumps([])
-                x = None
-            else:
-                print("Building Goldberg-Liu IP...", end="", flush=True)
-                start = time.time()
-                model, x = build_golberg_liu_ip(g, thetas, max_time, env=gurobi_env)
-                build_time = time.time() - start
+                append_result(
+                    results,
+                    h_name,
+                    n_nodes,
+                    c,
+                    seed,
+                    round(float(h_runtime), 4),
+                    int(h_k) if h_k is not None else None,
+                    [list(event) for event in h_history] if h_history is not None else None,
+                )
+                print_algorithm_line(
+                    f"heuristic: {h_name}",
+                    format_k_time(int(h_k) if h_k is not None else None, float(h_runtime)),
+                )
 
-                gl_history = [(n_nodes, 0.0)]
-
-                def gl_callback(model: gp.Model, where: int) -> None:
-                    if where == gp.GRB.Callback.MIPSOL:
-                        obj = model.cbGet(gp.GRB.Callback.MIPSOL_OBJ)
-                        runtime = model.cbGet(gp.GRB.Callback.RUNTIME)
-                        gl_history.append([int(round(obj)), round(runtime + build_time, 4)])
-
-                if max_time - build_time < 0:
-                    print(
-                        f"\rGoldberg-Liu IP build failed: build time {round(build_time, 2)}s exceeds max time {max_time}s."
-                        + " " * 20
-                    )
-                    gl_build_failed = True
-                    gl_build_time = None
-                    gl_opt_time = None
-                    gl_runtime = None
-                    gl_k = None
-                    gl_history_json = json.dumps([])
-                else:
-                    print(f"\rGoldberg-Liu IP built in {round(build_time, 2)} seconds!" + " " * 20)
-                    model.setParam("TimeLimit", max_time - build_time)
-                    print(f"Solving Goldberg-Liu IP with time limit {round(max_time - build_time, 2)} seconds...", end="", flush=True)
-                    model.optimize(gl_callback)
-                    print(f"\rGoldberg-Liu IP solved in {round(model.Runtime, 2)} seconds!" + " " * 20)
-
-                    gl_build_failed = False
-                    gl_build_time = round(build_time, 4)
-                    gl_opt_time = round(float(model.Runtime), 4)
-                    gl_runtime = round(build_time + gl_opt_time, 4)
-                    gl_k = int(round(model.objVal)) if model.SolCount > 0 else None
-                    if model.SolCount > 0:
-                        gl_history.append([gl_k, gl_runtime])
-                        gl_history_json = json.dumps(gl_history)
-                    else:
-                        gl_history_json = json.dumps([])
+            gl_total_time, gl_k, gl_history = run_goldberg_liu(
+                g,
+                thetas,
+                n_nodes,
+                c,
+                seed,
+                max_time,
+                args.skip_gurobi_from_n,
+                gurobi_env,
+            )
+            append_result(
+                results,
+                "goldberg_liu",
+                n_nodes,
+                c,
+                seed,
+                gl_total_time,
+                gl_k,
+                gl_history,
+            )
 
             ns_k, final_x, ns_runtime, ns_history = NS_technology_diffusion_binary_search(
                 g,
                 thetas,
-                strategy,
+                ns_strategy,
                 args.delta,
                 args.xi,
                 args.d,
@@ -269,74 +399,43 @@ def main() -> None:
                 args.buffer_dim,
                 args.verbose,
             )
-
-            ns_history_json = json.dumps([tuple(event) for event in ns_history])
-            gap = (ns_k - gl_k) if (ns_k is not None and gl_k is not None) else None
-
-            results.append(
-                [
-                    n_nodes,
-                    c,
-                    seed,
-                    g.number_of_nodes(),
-                    g.number_of_edges(),
-                    max_time,
-                    gl_build_failed,
-                    gl_build_time,
-                    gl_opt_time,
-                    gl_runtime,
-                    gl_k,
-                    ns_runtime,
-                    ns_k,
-                    gap,
-                    gl_history_json,
-                    ns_history_json,
-                ]
+            append_result(
+                results,
+                "ns_binary_search",
+                n_nodes,
+                c,
+                seed,
+                round(float(ns_runtime), 4),
+                int(ns_k) if ns_k is not None else None,
+                [list(event) for event in ns_history] if ns_history is not None else None,
+            )
+            print_algorithm_line(
+                "ns_binary_search",
+                format_k_time(int(ns_k) if ns_k is not None else None, float(ns_runtime)),
             )
 
-            if gl_build_failed:
-                if gl_skipped_for_size:
-                    print("Goldberg-Liu -> Skipped for size threshold.")
-                else:
-                    print("Goldberg-Liu -> Build failed.")
-            else:
-                print(f"Goldberg-Liu -> K={gl_k}, runtime={round(gl_runtime, 2)}s")
-            print(f"NS Binary    -> K={ns_k}, runtime={round(float(ns_runtime), 2)}s, gap(NS-GL)={gap}")
+            if final_x is not None:
+                del final_x
 
-            if x is not None:
-                del x
-            if model is not None:
-                model.dispose()
-                del model
-            del final_x
     finally:
         gurobi_env.dispose()
 
     elapsed_all = time.time() - start_all
     columns = [
+        "algorithm",
         "n_nodes",
         "c",
         "seed",
-        "num_nodes",
-        "num_edges",
-        "max_time",
-        "GL_build_failed",
-        "GL_build_time_s",
-        "GL_optimization_time_s",
-        "GL_runtime_s",
-        "GL_K",
-        "NS_runtime_s",
-        "NS_K",
-        "NS_GL_gap",
-        "GL_history_json",
-        "NS_history_json",
+        "total_time",
+        "K",
+        "history",
     ]
 
     results_df = pd.DataFrame(results, columns=columns)
-    results_df = results_df.sort_values(["n_nodes", "c", "seed"]).reset_index(drop=True)
+    results_df = results_df.sort_values(["n_nodes", "c", "seed", "algorithm"]).reset_index(drop=True)
 
     print("\n" + "=" * 90)
-    print(f"Completed {len(results_df)} runs in {round(elapsed_all, 2)} seconds.")
+    print(f"Completed {len(results_df)} algorithm evaluations in {round(elapsed_all, 2)} seconds.")
 
     if args.save_results_csv:
         results_df.to_csv(results_csv_path, index=False)
@@ -345,6 +444,7 @@ def main() -> None:
     static_params = {
         "init_nodes": args.init_nodes,
         "init_mode": args.init_mode,
+        "connected": args.connected,
         "delta": args.delta,
         "xi": args.xi,
         "d": args.d,
@@ -355,7 +455,9 @@ def main() -> None:
         "verbose": args.verbose,
         "max_time_scale": args.max_time_scale,
         "skip_gurobi_from_n": args.skip_gurobi_from_n,
-        "strategy_names": [fn.__name__ for fn in strategy],
+        "heuristics": [fn.__name__ for fn in heuristics],
+        "ns_strategy": [fn.__name__ for fn in ns_strategy],
+        "result_columns": columns,
     }
 
     with static_params_path.open("w", encoding="utf-8") as file:

@@ -77,7 +77,7 @@ def get_activation_sequence_and_seeds(
     return t_of, order, seeds
 
 
-def build_marta_ip(
+def build_exact_ip(
     g: nx.Graph,
     theta: Mapping[int, int],
     k: int,

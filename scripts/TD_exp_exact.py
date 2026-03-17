@@ -21,6 +21,7 @@ from technology_diffusion import (
     NS_technology_diffusion_binary_search,
     SD_start,
     betweenness,
+    build_exact_ip,
     build_golberg_liu_ip,
     create_pa_graph,
     degree,
@@ -75,8 +76,9 @@ def resolve_output_paths(args: argparse.Namespace) -> tuple[Path, Path, Path]:
         add_tag_to_path(args.static_params_path, run_tag),
     )
 
+
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the technology diffusion experiment.")
+    parser = argparse.ArgumentParser(description="Run technology diffusion experiment comparing NS, Goldberg-Liu, and Exact IP.")
     parser.add_argument("--c-list", type=int, nargs="+", default=DEFAULT_C_LIST)
     parser.add_argument("--n-list", type=int, nargs="+", default=DEFAULT_N_LIST)
     parser.add_argument("--seed-list", type=int, nargs="+", default=DEFAULT_SEED_LIST)
@@ -103,19 +105,37 @@ def parse_args() -> argparse.Namespace:
         help="Skip Goldberg-Liu IP build/optimize for runs with n_nodes >= this threshold.",
     )
     parser.add_argument(
+        "--skip-exact-from-n",
+        type=int,
+        default=20,
+        help="Skip Exact IP build/optimize for runs with n_nodes >= this threshold.",
+    )
+    parser.add_argument(
+        "--exact-time-horizon",
+        type=int,
+        default=None,
+        help="Optional time horizon for Exact IP. Defaults to n_nodes.",
+    )
+    parser.add_argument(
+        "--exact-use-simultaneous",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Use simultaneous propagation constraints in Exact IP.",
+    )
+    parser.add_argument(
         "--results-csv-path",
         type=Path,
-        default=RESULTS / "technology_diffusion_results.csv",
+        default=RESULTS / "technology_diffusion_exact_results.csv",
     )
     parser.add_argument(
         "--gurobi-log-path",
         type=Path,
-        default=RESULTS / "gurobi.log",
+        default=RESULTS / "gurobi_exact.log",
     )
     parser.add_argument(
         "--static-params-path",
         type=Path,
-        default=RESULTS / "technology_diffusion_static_params.json",
+        default=RESULTS / "technology_diffusion_exact_static_params.json",
     )
     parser.add_argument(
         "--run-label",
@@ -136,8 +156,8 @@ def parse_args() -> argparse.Namespace:
 
 def build_strategy() -> list:
     return [
-        high_thetas_start,
         degree_threshold,
+        high_thetas_start,
         SD_start,
         degree_connected,
         degree,
@@ -151,7 +171,6 @@ def configure_gurobi_env(save_gurobi_log: bool, gurobi_log_path: Path) -> gp.Env
     gurobi_env.setParam("OutputFlag", 1 if save_gurobi_log else 0)
     gurobi_env.setParam("LogToConsole", 0)
     gurobi_env.setParam("LogFile", str(gurobi_log_path) if save_gurobi_log else "")
-    gurobi_env.setParam("Presolve", 0)
     gurobi_env.start()
     return gurobi_env
 
@@ -167,6 +186,7 @@ def main() -> None:
     print(f"Results CSV: {results_csv_path}")
     print(f"Gurobi log: {gurobi_log_path}")
     print(f"Static params: {static_params_path}")
+
     results = []
     start_all = time.time()
     gurobi_env = configure_gurobi_env(args.save_gurobi_log, gurobi_log_path)
@@ -174,23 +194,18 @@ def main() -> None:
     try:
         for run_idx, (n_nodes, c, seed) in enumerate(combinations, start=1):
             max_time = args.max_time_scale * (n_nodes // 100)
-            model = None
-            
+            gl_model = None
+            exact_model = None
+            gl_x = None
+            exact_x = None
+            exact_y = None
+            exact_n = None
+
             print("\n" + "=" * 90)
             print(
                 f"Run {run_idx}/{len(combinations)} | "
                 f"N={n_nodes}, c={c}, seed={seed}, init_nodes={args.init_nodes}, init_mode={args.init_mode}"
             )
-
-            if args.save_gurobi_log:
-                with gurobi_log_path.open("a", encoding="utf-8") as log_f:
-                    log_f.write(
-                        f"\n{'='*60}\n"
-                        f"Run {run_idx}/{len(combinations)} | "
-                        f"n_nodes={n_nodes}, c={c}, seed={seed}, "
-                        f"init_nodes={args.init_nodes}, init_mode={args.init_mode}\n"
-                        f"{'='*60}\n"
-                    )
 
             g, thetas = create_pa_graph(
                 n_nodes=n_nodes,
@@ -211,12 +226,11 @@ def main() -> None:
                 gl_runtime = None
                 gl_k = None
                 gl_history_json = json.dumps([])
-                x = None
             else:
-                print("Building Goldberg-Liu IP...", end="", flush=True)
-                start = time.time()
-                model, x = build_golberg_liu_ip(g, thetas, max_time, env=gurobi_env)
-                build_time = time.time() - start
+                print("Building Goldberg-Liu IP...", end="")
+                gl_build_start = time.time()
+                gl_model, gl_x = build_golberg_liu_ip(g, thetas, max_time, env=gurobi_env)
+                build_time = time.time() - gl_build_start
 
                 gl_history = [(n_nodes, 0.0)]
 
@@ -226,7 +240,7 @@ def main() -> None:
                         runtime = model.cbGet(gp.GRB.Callback.RUNTIME)
                         gl_history.append([int(round(obj)), round(runtime + build_time, 4)])
 
-                if max_time - build_time < 0:
+                if gl_model is None or max_time - build_time < 0:
                     print(
                         f"\rGoldberg-Liu IP build failed: build time {round(build_time, 2)}s exceeds max time {max_time}s."
                         + " " * 20
@@ -239,21 +253,76 @@ def main() -> None:
                     gl_history_json = json.dumps([])
                 else:
                     print(f"\rGoldberg-Liu IP built in {round(build_time, 2)} seconds!" + " " * 20)
-                    model.setParam("TimeLimit", max_time - build_time)
-                    print(f"Solving Goldberg-Liu IP with time limit {round(max_time - build_time, 2)} seconds...", end="", flush=True)
-                    model.optimize(gl_callback)
-                    print(f"\rGoldberg-Liu IP solved in {round(model.Runtime, 2)} seconds!" + " " * 20)
+                    print(
+                        f"Solving Goldberg-Liu IP with time limit {round(max_time - build_time, 2)} seconds...",
+                        end="",
+                    )
+                    suppress_print()
+                    gl_model.setParam("TimeLimit", max_time - build_time)
+                    resume_print()
+                    gl_model.optimize(gl_callback)
+                    print(f"\rGoldberg-Liu IP solved in {round(gl_model.Runtime, 2)} seconds!" + " " * 20)
 
                     gl_build_failed = False
                     gl_build_time = round(build_time, 4)
-                    gl_opt_time = round(float(model.Runtime), 4)
+                    gl_opt_time = round(float(gl_model.Runtime), 4)
                     gl_runtime = round(build_time + gl_opt_time, 4)
-                    gl_k = int(round(model.objVal)) if model.SolCount > 0 else None
-                    if model.SolCount > 0:
+                    gl_k = int(round(gl_model.objVal)) if gl_model.SolCount > 0 else None
+                    if gl_model.SolCount > 0:
                         gl_history.append([gl_k, gl_runtime])
                         gl_history_json = json.dumps(gl_history)
                     else:
                         gl_history_json = json.dumps([])
+
+            exact_skipped_for_size = n_nodes >= args.skip_exact_from_n
+            if exact_skipped_for_size:
+                print(f"Skipping Exact IP for N={n_nodes} (threshold: {args.skip_exact_from_n}).")
+                exact_build_failed = True
+                exact_build_time = None
+                exact_opt_time = None
+                exact_runtime = None
+                exact_k = None
+            else:
+                print("Building Exact IP...", end="")
+                exact_build_start = time.time()
+                exact_model, exact_x, exact_y, exact_n = build_exact_ip(
+                    g,
+                    thetas,
+                    k=n_nodes,
+                    use_simultaneous=args.exact_use_simultaneous,
+                    time_horizon=args.exact_time_horizon,
+                    max_time=max_time,
+                )
+                exact_build_elapsed = time.time() - exact_build_start
+
+                if exact_model is None or max_time - exact_build_elapsed < 0:
+                    print(
+                        f"\rExact IP build failed: build time {round(exact_build_elapsed, 2)}s exceeds max time {max_time}s."
+                        + " " * 20
+                    )
+                    exact_build_failed = True
+                    exact_build_time = None
+                    exact_opt_time = None
+                    exact_runtime = None
+                    exact_k = None
+                else:
+                    print(f"\rExact IP built in {round(exact_build_elapsed, 2)} seconds!" + " " * 20)
+                    print(
+                        f"Solving Exact IP with time limit {round(max_time - exact_build_elapsed, 2)} seconds...",
+                        end="",
+                    )
+                    exact_model.setParam("OutputFlag", 1 if args.save_gurobi_log else 0)
+                    exact_model.setParam("LogToConsole", 0)
+                    exact_model.setParam("LogFile", str(gurobi_log_path) if args.save_gurobi_log else "")
+                    exact_model.setParam("TimeLimit", max_time - exact_build_elapsed)
+                    exact_model.optimize()
+                    print(f"\rExact IP solved in {round(exact_model.Runtime, 2)} seconds!" + " " * 20)
+
+                    exact_build_failed = False
+                    exact_build_time = round(exact_build_elapsed, 4)
+                    exact_opt_time = round(float(exact_model.Runtime), 4)
+                    exact_runtime = round(exact_build_elapsed + exact_opt_time, 4)
+                    exact_k = int(round(exact_model.objVal)) if exact_model.SolCount > 0 else None
 
             ns_k, final_x, ns_runtime, ns_history = NS_technology_diffusion_binary_search(
                 g,
@@ -271,7 +340,9 @@ def main() -> None:
             )
 
             ns_history_json = json.dumps([tuple(event) for event in ns_history])
-            gap = (ns_k - gl_k) if (ns_k is not None and gl_k is not None) else None
+            ns_gl_gap = (ns_k - gl_k) if (ns_k is not None and gl_k is not None) else None
+            ns_exact_gap = (ns_k - exact_k) if (ns_k is not None and exact_k is not None) else None
+            gl_exact_gap = (gl_k - exact_k) if (gl_k is not None and exact_k is not None) else None
 
             results.append(
                 [
@@ -286,9 +357,16 @@ def main() -> None:
                     gl_opt_time,
                     gl_runtime,
                     gl_k,
+                    exact_build_failed,
+                    exact_build_time,
+                    exact_opt_time,
+                    exact_runtime,
+                    exact_k,
                     ns_runtime,
                     ns_k,
-                    gap,
+                    ns_gl_gap,
+                    ns_exact_gap,
+                    gl_exact_gap,
                     gl_history_json,
                     ns_history_json,
                 ]
@@ -300,14 +378,35 @@ def main() -> None:
                 else:
                     print("Goldberg-Liu -> Build failed.")
             else:
-                print(f"Goldberg-Liu -> K={gl_k}, runtime={round(gl_runtime, 2)}s")
-            print(f"NS Binary    -> K={ns_k}, runtime={round(float(ns_runtime), 2)}s, gap(NS-GL)={gap}")
+                print(f"Goldberg-Liu -> K={gl_k}, runtime={round(float(gl_runtime), 2)}s")
 
-            if x is not None:
-                del x
-            if model is not None:
-                model.dispose()
-                del model
+            if exact_build_failed:
+                if exact_skipped_for_size:
+                    print("Exact IP     -> Skipped for size threshold.")
+                else:
+                    print("Exact IP     -> Build failed.")
+            else:
+                print(f"Exact IP     -> K={exact_k}, runtime={round(float(exact_runtime), 2)}s")
+
+            print(
+                f"NS Binary    -> K={ns_k}, runtime={round(float(ns_runtime), 2)}s, "
+                f"gap(NS-GL)={ns_gl_gap}, gap(NS-EX)={ns_exact_gap}"
+            )
+
+            if gl_x is not None:
+                del gl_x
+            if gl_model is not None:
+                gl_model.dispose()
+                del gl_model
+            if exact_n is not None:
+                del exact_n
+            if exact_y is not None:
+                del exact_y
+            if exact_x is not None:
+                del exact_x
+            if exact_model is not None:
+                exact_model.dispose()
+                del exact_model
             del final_x
     finally:
         gurobi_env.dispose()
@@ -325,9 +424,16 @@ def main() -> None:
         "GL_optimization_time_s",
         "GL_runtime_s",
         "GL_K",
+        "EX_build_failed",
+        "EX_build_time_s",
+        "EX_optimization_time_s",
+        "EX_runtime_s",
+        "EX_K",
         "NS_runtime_s",
         "NS_K",
         "NS_GL_gap",
+        "NS_EX_gap",
+        "GL_EX_gap",
         "GL_history_json",
         "NS_history_json",
     ]
@@ -355,6 +461,9 @@ def main() -> None:
         "verbose": args.verbose,
         "max_time_scale": args.max_time_scale,
         "skip_gurobi_from_n": args.skip_gurobi_from_n,
+        "skip_exact_from_n": args.skip_exact_from_n,
+        "exact_time_horizon": args.exact_time_horizon,
+        "exact_use_simultaneous": args.exact_use_simultaneous,
         "strategy_names": [fn.__name__ for fn in strategy],
     }
 

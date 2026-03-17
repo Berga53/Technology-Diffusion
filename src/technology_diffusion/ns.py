@@ -542,7 +542,6 @@ def NS_technology_diffusion_binary_search(
     best_k = None
     best_solution_x = None
     top_k, bottom_k = n_nodes, 1
-    time_single = max_time / max(1, math.ceil(math.log2(n_nodes)))
     times = {}
     strategy_tried = {}
     temp_x = {}
@@ -555,13 +554,14 @@ def NS_technology_diffusion_binary_search(
         tried_k.add(k)
 
         remaining = max_time - (time.time() - start)
+        time_single = remaining / max(1, math.ceil(math.log2(top_k - bottom_k + 1)))
         if remaining <= 0:
             break
         
         x = strategy[0](g, n_nodes, k, thetas=thetas, connected=1)
 
         _print_binary_search_status(verbose, k, best_k, start, max_time, done=False)
-        s, final_x, history_ns = Neighbor_Search_td(g, thetas, x, delta, xi, d, min_conn, mg_max_depth, mg_memory_len, min(remaining, max_time), buffer_dim, 0)
+        s, final_x, history_ns = Neighbor_Search_td(g, thetas, x, delta, xi, d, min_conn, mg_max_depth, mg_memory_len, min(remaining, time_single), buffer_dim, 0)
         spread = s[-1]
         x_last = np.array(final_x[-1], dtype=float)
         times[k] = history_ns[-1][1]
@@ -606,7 +606,7 @@ def NS_technology_diffusion_binary_search(
             break
         
         _print_binary_search_status(verbose, k, best_k, start, max_time, done=False)
-        s, final_x, _ = Neighbor_Search_td(g, thetas, x, delta, xi, d, min_conn, mg_max_depth, mg_memory_len, min(remaining, max_time), buffer_dim, 0)
+        s, final_x, _ = Neighbor_Search_td(g, thetas, x, delta, xi, d, min_conn, mg_max_depth, mg_memory_len, min(remaining, time_single), buffer_dim, 0)
         strategy_tried[k] = strat
 
         if s[-1] == n_nodes:
