@@ -37,15 +37,15 @@ If you prefer a one-command setup from the repository root:
 make setup-exact PYTHON=python3.13
 ```
 
-## Run TD Experiment Script
+## Run Technology Diffusion Script
 
 ```bash
 source .venv/bin/activate
-python scripts/TD_exp.py
+python scripts/run_technology_diffusion.py
 ```
 
 Or, without manually activating the environment:
 
 ```bash
-make td-exp
+make run-technology-diffusion
 ```

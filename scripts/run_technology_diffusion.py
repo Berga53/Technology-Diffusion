@@ -124,7 +124,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--results-csv-path",
         type=Path,
-        default=RESULTS / "technology_diffusion_combined_results.csv",
+        default=RESULTS / "technology_diffusion_results.csv",
     )
     parser.add_argument(
         "--gurobi-log-path",
@@ -134,7 +134,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--static-params-path",
         type=Path,
-        default=RESULTS / "technology_diffusion_combined_static_params.json",
+        default=RESULTS / "technology_diffusion_static_params.json",
     )
     parser.add_argument(
         "--run-label",

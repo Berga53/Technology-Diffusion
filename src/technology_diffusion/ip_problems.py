@@ -84,6 +84,7 @@ def build_exact_ip(
     use_simultaneous: bool = True,
     time_horizon: Optional[int] = None,
     max_time: Optional[float] = None,
+    env: Optional[gp.Env] = None,
 ) -> tuple[Any | None, Any | None, Any | None, Any | None]:
     start_time = time.time()
     v = list(g.nodes())
@@ -95,7 +96,7 @@ def build_exact_ip(
     t0 = range(0, time_horizon + 1)
     r = range(1, k + 1)
 
-    model = gp.Model("component_threshold_diffusion")
+    model = gp.Model("component_threshold_diffusion", env=env)
     x = model.addVars(v, t0, vtype=GRB.BINARY, name="x")
     y = model.addVars(v, r, t0, vtype=GRB.BINARY, name="y")
     nvar = model.addVars(v, r, t, vtype=GRB.INTEGER, name="n")
