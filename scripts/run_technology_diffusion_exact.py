@@ -18,7 +18,7 @@ RESULTS = ROOT / "experiments" / "technology diffusion"
 RESULTS.mkdir(parents=True, exist_ok=True)
 
 from technology_diffusion import (
-    NS_technology_diffusion_binary_search,
+    NaDS_technology_diffusion_binary_search,
     degree_discount,
     betweenness,
     build_exact_ip,
@@ -93,7 +93,7 @@ def resolve_output_paths(args: argparse.Namespace) -> tuple[Path, Path, Path]:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run technology diffusion experiment comparing NS, Goldberg-Liu, and Exact IP.")
+    parser = argparse.ArgumentParser(description="Run technology diffusion experiment comparing NaDS, Goldberg-Liu, and Exact IP.")
     parser.add_argument("--c-list", type=int, nargs="+", default=DEFAULT_C_LIST)
     parser.add_argument("--n-list", type=int, nargs="+", default=DEFAULT_N_LIST)
     parser.add_argument("--seed-list", type=int, nargs="+", default=DEFAULT_SEED_LIST)
@@ -115,10 +115,10 @@ def parse_args() -> argparse.Namespace:
         help="Per-run time limit used as max_time_scale * n_nodes (default: 4 seconds per node).",
     )
     parser.add_argument(
-        "--ns-max-time-scale",
+        "--nads-max-time-scale",
         type=float,
         default=1,
-        help="Per-run time limit for NS used as ns_max_time_scale * n_nodes (default: 1 second per node).",
+        help="Per-run time limit for NaDS used as nads_max_time_scale * n_nodes (default: 1 second per node).",
     )
     parser.add_argument(
         "--skip-gurobi-from-n",
@@ -176,7 +176,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_ns_strategy() -> list:
+def build_nads_strategy() -> list:
     return [
         degree_threshold,
         high_thetas,
@@ -259,7 +259,7 @@ def append_gurobi_log_header(
 
 def main() -> None:
     args = parse_args()
-    ns_strategy = build_ns_strategy()
+    nads_strategy = build_nads_strategy()
     heuristics = build_heuristics()
     results_csv_path, gurobi_log_path, static_params_path = resolve_output_paths(args)
 
@@ -278,7 +278,7 @@ def main() -> None:
     try:
         for run_idx, (n_nodes, c, seed) in enumerate(combinations, start=1):
             max_time = args.max_time_scale * n_nodes
-            ns_max_time = args.ns_max_time_scale * n_nodes
+            nads_max_time = args.nads_max_time_scale * n_nodes
             gl_model = None
             exact_model = None
             gl_x = None
@@ -493,34 +493,34 @@ def main() -> None:
                 exact_history,
             )
 
-            ns_k, final_x, ns_runtime, ns_history = NS_technology_diffusion_binary_search(
+            nads_k, final_x, nads_runtime, nads_history = NaDS_technology_diffusion_binary_search(
                 g,
                 thetas,
-                ns_strategy,
+                nads_strategy,
                 args.delta,
                 args.xi,
                 args.d,
                 args.min_conn,
                 args.mg_max_depth,
                 args.mg_memory_len,
-                ns_max_time,
+                nads_max_time,
                 args.buffer_dim,
                 args.verbose,
             )
 
             append_result(
                 results,
-                "ns_binary_search",
+                "nads_binary_search",
                 n_nodes,
                 c,
                 seed,
-                round(float(ns_runtime), 4),
-                int(ns_k) if ns_k is not None else None,
-                [list(event) for event in ns_history] if ns_history is not None else None,
+                round(float(nads_runtime), 4),
+                int(nads_k) if nads_k is not None else None,
+                [list(event) for event in nads_history] if nads_history is not None else None,
             )
             print_algorithm_line(
-                "ns_binary_search",
-                format_k_time(int(ns_k) if ns_k is not None else None, float(ns_runtime)),
+                "nads_binary_search",
+                format_k_time(int(nads_k) if nads_k is not None else None, float(nads_runtime)),
             )
 
             if gl_x is not None:
@@ -575,13 +575,13 @@ def main() -> None:
         "mg_memory_len": args.mg_memory_len,
         "verbose": args.verbose,
         "max_time_scale": args.max_time_scale,
-        "ns_max_time_scale": args.ns_max_time_scale,
+        "nads_max_time_scale": args.nads_max_time_scale,
         "skip_gurobi_from_n": args.skip_gurobi_from_n,
         "skip_exact_from_n": args.skip_exact_from_n,
         "exact_time_horizon": args.exact_time_horizon,
         "exact_use_simultaneous": args.exact_use_simultaneous,
         "heuristics": [fn.__name__ for fn in heuristics],
-        "ns_strategy": [fn.__name__ for fn in ns_strategy],
+        "nads_strategy": [fn.__name__ for fn in nads_strategy],
         "result_columns": columns,
     }
 

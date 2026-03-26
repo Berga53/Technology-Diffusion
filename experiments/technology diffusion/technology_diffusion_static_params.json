@@ -20,7 +20,7 @@
     "degree",
     "betweenness"
   ],
-  "ns_strategy": [
+  "nads_strategy": [
     "high_thetas",
     "degree_threshold",
     "degree_discount",

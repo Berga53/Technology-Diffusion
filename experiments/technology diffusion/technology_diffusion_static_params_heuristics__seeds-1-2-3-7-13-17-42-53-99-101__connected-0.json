@@ -1,0 +1,23 @@
+{
+  "init_nodes": 5,
+  "init_mode": "complete",
+  "connected": 0,
+  "verbose": 1,
+  "heuristics": [
+    "degree_threshold",
+    "high_thetas",
+    "degree_discount",
+    "degree_connected",
+    "degree",
+    "betweenness"
+  ],
+  "result_columns": [
+    "algorithm",
+    "n_nodes",
+    "c",
+    "seed",
+    "total_time",
+    "K",
+    "history"
+  ]
+}

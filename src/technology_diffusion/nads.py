@@ -34,7 +34,7 @@ def _seedset_from_x(x: np.ndarray) -> set[int]:
     return set(np.nonzero(x)[0])
 
 
-def _print_ns_status(
+def _print_nads_status(
     verbose: int,
     calls: int,
     start: float,
@@ -124,7 +124,7 @@ def _evaluate_neighbors(
         s_elem = connected_component_spread(g, x_elem, thetas=thetas, max_t=1000)[0]
         buffer.append(key)
         calls += 1
-        _print_ns_status(verbose, calls, start, max_time, s_elem, done=False)
+        _print_nads_status(verbose, calls, start, max_time, s_elem, done=False)
 
         if s_elem > s_temp:
             history.append([s_elem, time.time() - start, calls])
@@ -311,7 +311,7 @@ def _mg_phase(
                 s_prov = connected_component_spread(g, x_prov, thetas=thetas, max_t=1000)[0]
                 buffer.append(key)
                 calls += 1
-                _print_ns_status(verbose, calls, start, max_time, s_prov, done=False)
+                _print_nads_status(verbose, calls, start, max_time, s_prov, done=False)
 
                 if s_prov > s_temp:
                     history.append([s_prov, time.time() - start, calls])
@@ -332,7 +332,7 @@ def _mg_phase(
     return False, improved_mg, x_temp, s_temp, calls, stop
 
 
-def Neighbor_Search_td(
+def NaDS_td(
     g: nx.Graph,
     thetas: Mapping[int, int] | np.ndarray,
     x0: np.ndarray,
@@ -362,10 +362,10 @@ def Neighbor_Search_td(
     start = time.time()
     history = [[s_hist[-1], time.time() - start, calls]]
 
-    _print_ns_status(verbose, calls, start, max_time, s_hist[-1], done=False)
+    _print_nads_status(verbose, calls, start, max_time, s_hist[-1], done=False)
 
     if s_hist[-1] == target_spread:
-        _print_ns_status(verbose, calls, start, max_time, s_hist[-1], done=True)
+        _print_nads_status(verbose, calls, start, max_time, s_hist[-1], done=True)
         return s_hist, x_hist, history
 
     while (not stop) and (r < 1000):
@@ -400,7 +400,7 @@ def Neighbor_Search_td(
         if found_opt:
             x_hist.append(x_temp)
             s_hist.append(s_temp)
-            _print_ns_status(verbose, calls, start, max_time, s_hist[-1], done=True)
+            _print_nads_status(verbose, calls, start, max_time, s_hist[-1], done=True)
             return s_hist, x_hist, history
 
         if improved_mg:
@@ -438,7 +438,7 @@ def Neighbor_Search_td(
         if found_opt:
             x_hist.append(x_temp)
             s_hist.append(s_temp)
-            _print_ns_status(verbose, calls, start, max_time, s_hist[-1], done=True)
+            _print_nads_status(verbose, calls, start, max_time, s_hist[-1], done=True)
             return s_hist, x_hist, history
 
         x_hist.append(x_temp)
@@ -479,7 +479,7 @@ def Neighbor_Search_td(
         if found_opt:
             x_hist.append(x_temp)
             s_hist.append(s_temp)
-            _print_ns_status(verbose, calls, start, max_time, s_hist[-1], done=True)
+            _print_nads_status(verbose, calls, start, max_time, s_hist[-1], done=True)
             return s_hist, x_hist, history
 
         x_hist.append(x_temp)
@@ -494,7 +494,7 @@ def Neighbor_Search_td(
             xi_t = xi_t * delta
 
     history.append([s_hist[-1], time.time() - start, calls])
-    _print_ns_status(verbose, calls, start, max_time, s_hist[-1], done=True)
+    _print_nads_status(verbose, calls, start, max_time, s_hist[-1], done=True)
     return s_hist, x_hist, history
 
 def _print_binary_search_status(
@@ -521,7 +521,7 @@ def _print_binary_search_status(
             end="",
         )
 
-def NS_technology_diffusion_binary_search(
+def NaDS_technology_diffusion_binary_search(
     g: nx.Graph,
     thetas: Mapping[int, int] | np.ndarray,
     strategy: Sequence[Callable[..., np.ndarray]],
@@ -561,10 +561,10 @@ def NS_technology_diffusion_binary_search(
         x = strategy[0](g, n_nodes, k, thetas=thetas, connected=1)
 
         _print_binary_search_status(verbose, k, best_k, start, max_time, done=False)
-        s, final_x, history_ns = Neighbor_Search_td(g, thetas, x, delta, xi, d, min_conn, mg_max_depth, mg_memory_len, min(remaining, time_single), buffer_dim, 0)
+        s, final_x, history_nads = NaDS_td(g, thetas, x, delta, xi, d, min_conn, mg_max_depth, mg_memory_len, min(remaining, time_single), buffer_dim, 0)
         spread = s[-1]
         x_last = np.array(final_x[-1], dtype=float)
-        times[k] = history_ns[-1][1]
+        times[k] = history_nads[-1][1]
         strategy_tried[k] = -1 if times[k] < 0.9 * time_single else 0
         if strategy_tried[k] == -1:
             temp_x[k] = x_last
@@ -606,7 +606,7 @@ def NS_technology_diffusion_binary_search(
             break
         
         _print_binary_search_status(verbose, k, best_k, start, max_time, done=False)
-        s, final_x, _ = Neighbor_Search_td(g, thetas, x, delta, xi, d, min_conn, mg_max_depth, mg_memory_len, min(remaining, time_single), buffer_dim, 0)
+        s, final_x, _ = NaDS_td(g, thetas, x, delta, xi, d, min_conn, mg_max_depth, mg_memory_len, min(remaining, time_single), buffer_dim, 0)
         strategy_tried[k] = strat
 
         if s[-1] == n_nodes:
