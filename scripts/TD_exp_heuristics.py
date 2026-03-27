@@ -17,13 +17,13 @@ RESULTS = ROOT / "experiments" / "technology diffusion"
 RESULTS.mkdir(parents=True, exist_ok=True)
 
 from technology_diffusion import (
-    SD_start,
+    degree_discount,
     betweenness,
     create_pa_graph,
     degree,
     degree_connected,
     degree_threshold,
-    high_thetas_start,
+    high_thetas,
     random_start,
     technology_diffusion_heuristics,
 )
@@ -108,8 +108,8 @@ def parse_args() -> argparse.Namespace:
 def build_heuristics() -> list:
     return [
         degree_threshold,
-        high_thetas_start,
-        SD_start,
+        high_thetas,
+        degree_discount,
         degree_connected,
         degree,
         betweenness,

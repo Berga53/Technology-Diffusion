@@ -73,7 +73,6 @@ def create_pa_graph(
     nx.set_node_attributes(g, theta, name="theta")
     return g, theta
 
-
 def make_subset_connected(
     g: nx.Graph,
     x: Iterable[int],
@@ -81,26 +80,43 @@ def make_subset_connected(
     thetas: Mapping[int, int] | None = None,
 ) -> tuple[int, ...]:
     s = set(x)
-    while True:
-        comps = list(nx.connected_components(g.subgraph(s)))
-        if len(comps) <= 1:
+    target_size = len(s)
+
+    if not s:
+        return tuple()
+
+    if len(s) > 1:
+        terminals = sorted(s)
+        closure = nx.Graph()
+        closure.add_nodes_from(terminals)
+
+        for i, u in enumerate(terminals[:-1]):
+            lengths, paths = nx.single_source_dijkstra(g, source=u)
+            for v in terminals[i + 1 :]:
+                if v in lengths:
+                    closure.add_edge(u, v, weight=float(lengths[v]), path=paths[v])
+
+        if closure.number_of_edges() > 0:
+            mst = nx.minimum_spanning_tree(closure, weight="weight")
+            connected_nodes = set(s)
+            for u, v in mst.edges():
+                connected_nodes.update(closure[u][v]["path"])
+            s = connected_nodes
+
+    while len(s) > target_size:
+        induced = g.subgraph(s)
+        articulation = set(nx.articulation_points(induced)) if len(s) > 2 else set()
+        candidates = [node for node in s if node not in articulation]
+
+        if not candidates:
             break
 
-        c1, c2 = comps[0], comps[1]
-        u, v = next(iter(c1)), next(iter(c2))
-        path = nx.shortest_path(g, u, v)
-
-        to_add = [node for node in path if node not in s]
-        removable_pool = list(s - c1 - c2)
-
         if use_thetas and thetas is not None:
-            removable_pool = sorted(removable_pool, key=lambda node: thetas[node])
+            candidates.sort(key=lambda node: (thetas[node], node))
+        else:
+            candidates.sort()
 
-        to_remove = removable_pool[: len(to_add)]
-        for node in to_remove:
-            s.remove(node)
-        for node in to_add:
-            s.add(node)
+        s.remove(candidates[0])
 
     return tuple(sorted(s))
 
