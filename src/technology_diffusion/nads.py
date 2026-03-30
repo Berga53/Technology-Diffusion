@@ -9,6 +9,7 @@ import networkx as nx
 import numpy as np
 
 from .helpers import connected_component_spread, time_exceeded
+from .heuristics import technology_diffusion_heuristics
 
 
 def _max_comp_size_in_seedset(g: nx.Graph, seedset: set[int]) -> int:
@@ -521,6 +522,63 @@ def _print_binary_search_status(
             end="",
         )
 
+
+def _remaining_time(start: float, max_time: float) -> float:
+    return max(0.0, float(max_time) - (time.time() - start))
+
+
+def _rank_heuristics(
+    g: nx.Graph,
+    thetas: Mapping[int, int] | np.ndarray,
+    strategy: Sequence[Callable[..., np.ndarray]],
+    start: float,
+    max_time: float,
+) -> tuple[
+    list[Callable[..., np.ndarray]],
+    int,
+    int | None,
+    np.ndarray | None,
+    tuple[int, float] | None,
+]:
+    n_nodes = g.number_of_nodes()
+    if len(strategy) == 0:
+        raise ValueError("strategy must contain at least one heuristic.")
+
+    deterministic = list(strategy[:-1])
+    random_strategy = strategy[-1]
+
+    scored: list[tuple[int, float, Callable[..., np.ndarray]]] = []
+    best_k = None
+    best_x = None
+
+    for fn in deterministic:
+        if _remaining_time(start, max_time) <= 0:
+            break
+        try:
+            x_h, k_h, _, _ = technology_diffusion_heuristics(
+                g,
+                n_nodes,
+                thetas=thetas,
+                connected=1,
+                heuristic=fn,
+            )
+            k_h = int(k_h)
+            scored.append((k_h, time.time() - start, fn))
+
+            if best_k is None or k_h < best_k:
+                best_k = k_h
+                best_x = np.array(x_h, dtype=float, copy=True)
+        except Exception:
+            scored.append((n_nodes, float("inf"), fn))
+
+    scored.sort(key=lambda t: (t[0], t[1]))
+    ranked = [fn for _, _, fn in scored]
+    strategy_order = ranked + [random_strategy]
+
+    top_k = int(best_k) if best_k is not None else n_nodes
+
+    return strategy_order, top_k, best_k, best_x
+
 def NaDS_technology_diffusion_binary_search(
     g: nx.Graph,
     thetas: Mapping[int, int] | np.ndarray,
@@ -535,33 +593,64 @@ def NaDS_technology_diffusion_binary_search(
     buffer_dim: int,
     verbose: int = 0,
 ) -> tuple[int | None, np.ndarray | None, float, list[tuple[int, float]]]:
-    
+
     start = time.time()
     n_nodes = g.number_of_nodes()
+    strategy_order, top_k, best_k, best_solution_x = _rank_heuristics(
+        g,
+        thetas,
+        strategy,
+        start=start,
+        max_time=max_time,
+    )
+
     tried_k = set()
-    best_k = None
-    best_solution_x = None
-    top_k, bottom_k = n_nodes, 1
+    top_k, bottom_k = min(top_k, n_nodes), 1
     times = {}
     strategy_tried = {}
     temp_x = {}
     history = [(n_nodes, 0.0)]
+    last_tested_k = int(best_k) if best_k is not None else n_nodes
+    if top_k < n_nodes:
+        history.append((top_k, round(time.time() - start, 4)))
 
     while bottom_k <= top_k and time.time() - start < max_time:
         k = (top_k + bottom_k) // 2
+        last_tested_k = k
         if k in tried_k:
             break
         tried_k.add(k)
 
-        remaining = max_time - (time.time() - start)
-        time_single = remaining / max(1, math.ceil(math.log2(top_k - bottom_k + 1)))
+        remaining = _remaining_time(start, max_time)
         if remaining <= 0:
             break
+
+        interval = max(1, top_k - bottom_k + 1)
+        time_single = remaining / max(1, math.ceil(math.log2(interval)))
         
-        x = strategy[0](g, n_nodes, k, thetas=thetas, connected=1)
+        x = strategy_order[0](g, n_nodes, k, thetas=thetas, connected=1)
+        remaining_after_seed = _remaining_time(start, max_time)
+        if remaining_after_seed <= 0:
+            break
+        nads_budget = min(remaining_after_seed, time_single)
+        if nads_budget <= 0:
+            break
 
         _print_binary_search_status(verbose, k, best_k, start, max_time, done=False)
-        s, final_x, history_nads = NaDS_td(g, thetas, x, delta, xi, d, min_conn, mg_max_depth, mg_memory_len, min(remaining, time_single), buffer_dim, 0)
+        s, final_x, history_nads = NaDS_td(
+            g,
+            thetas,
+            x,
+            delta,
+            xi,
+            d,
+            min_conn,
+            mg_max_depth,
+            mg_memory_len,
+            nads_budget,
+            buffer_dim,
+            0,
+        )
         spread = s[-1]
         x_last = np.array(final_x[-1], dtype=float)
         times[k] = history_nads[-1][1]
@@ -578,6 +667,8 @@ def NaDS_technology_diffusion_binary_search(
         else:
             inferred_success_k = k + (n_nodes - spread)
             if best_k is None or inferred_success_k < best_k:
+                if _remaining_time(start, max_time) <= 0:
+                    break
                 _, _, active_after = connected_component_spread(g, x_last, thetas, max_t=1000)
                 inferred_x = x_last.copy()
                 inferred_x[np.where(active_after == 0)[0]] = 1.0
@@ -591,22 +682,44 @@ def NaDS_technology_diffusion_binary_search(
     random.seed(42)
     while time.time() - start < max_time and best_k is not None and best_k > 1:
         k = best_k - 1
+        last_tested_k = k
+
+        remaining = _remaining_time(start, max_time)
+        if remaining <= 0:
+            break
+
         if strategy_tried.get(k) is None:
             strat = 0
-            x = strategy[strat](g, n_nodes, k, thetas=thetas, connected=1)
+            x = strategy_order[strat](g, n_nodes, k, thetas=thetas, connected=1)
         elif strategy_tried[k] == -1:
             strat = 0
             x = temp_x[k]
         else:
-            strat = min(len(strategy) - 1, strategy_tried[k] + 1)
-            x = strategy[strat](g, n_nodes, k, thetas=thetas, connected=1)
+            strat = min(len(strategy_order) - 1, strategy_tried[k] + 1)
+            x = strategy_order[strat](g, n_nodes, k, thetas=thetas, connected=1)
 
-        remaining = max_time - (time.time() - start)
-        if remaining <= 0:
+        remaining_after_seed = _remaining_time(start, max_time)
+        if remaining_after_seed <= 0:
+            break
+        nads_budget = min(remaining_after_seed, remaining)
+        if nads_budget <= 0:
             break
         
         _print_binary_search_status(verbose, k, best_k, start, max_time, done=False)
-        s, final_x, _ = NaDS_td(g, thetas, x, delta, xi, d, min_conn, mg_max_depth, mg_memory_len, min(remaining, time_single), buffer_dim, 0)
+        s, final_x, _ = NaDS_td(
+            g,
+            thetas,
+            x,
+            delta,
+            xi,
+            d,
+            min_conn,
+            mg_max_depth,
+            mg_memory_len,
+            nads_budget,
+            buffer_dim,
+            0,
+        )
         strategy_tried[k] = strat
 
         if s[-1] == n_nodes:
@@ -617,6 +730,6 @@ def NaDS_technology_diffusion_binary_search(
             continue
     
     history.append((best_k, round(time.time() - start, 4)))
-    _print_binary_search_status(verbose, k, best_k, start, max_time, done=True)
+    _print_binary_search_status(verbose, last_tested_k, best_k, start, max_time, done=True)
 
     return best_k, best_solution_x, round(float(time.time() - start), 4), history

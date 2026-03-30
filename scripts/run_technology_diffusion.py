@@ -39,6 +39,18 @@ ALGORITHM_LABEL_WIDTH = 34
 K_VALUE_WIDTH = 3
 TIME_VALUE_WIDTH = 7
 
+NADS_STRATEGY_FUNCTIONS = {
+    "high_thetas": high_thetas,
+    "degree_threshold": degree_threshold,
+    "random_start": random_start,
+    "degree_discount": degree_discount,
+    "degree_connected": degree_connected,
+    "degree": degree,
+    "betweenness": betweenness,
+}
+
+DEFAULT_NADS_STRATEGY = ["high_thetas", "degree_threshold", "random_start"]
+
 
 def print_algorithm_line(algorithm: str, message: str) -> None:
     print(f"{algorithm:<{ALGORITHM_LABEL_WIDTH}} | {message}")
@@ -108,6 +120,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-conn", type=int, default=20)
     parser.add_argument("--mg-max-depth", type=int, default=5)
     parser.add_argument("--mg-memory-len", type=int, default=10)
+    parser.add_argument(
+        "--nads-strategy",
+        type=str,
+        nargs="+",
+        choices=sorted(NADS_STRATEGY_FUNCTIONS.keys()),
+        default=DEFAULT_NADS_STRATEGY,
+        help="Ordered list of strategy initializers to try in NaDS binary search. ",
+    )
     parser.add_argument("--verbose", type=int, default=1)
     parser.add_argument(
         "--max-time-scale",
@@ -153,16 +173,8 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_nads_strategy() -> list:
-    return [
-        high_thetas,
-        degree_threshold,
-        degree_discount,
-        degree_connected,
-        degree,
-        betweenness,
-        random_start,
-    ]
+def build_nads_strategy(strategy_names: list[str]) -> list:
+    return [NADS_STRATEGY_FUNCTIONS[name] for name in strategy_names]
 
 
 def build_heuristics() -> list:
@@ -296,7 +308,7 @@ def run_goldberg_liu(
 
 def main() -> None:
     args = parse_args()
-    nads_strategy = build_nads_strategy()
+    nads_strategy = build_nads_strategy(args.nads_strategy)
     heuristics = build_heuristics()
     results_csv_path, gurobi_log_path, static_params_path = resolve_output_paths(args)
 
