@@ -14,7 +14,7 @@ SRC_DIR = ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-RESULTS = ROOT / "experiments" / "technology diffusion"
+RESULTS = ROOT / "results" / "technology diffusion"
 RESULTS.mkdir(parents=True, exist_ok=True)
 
 from technology_diffusion import (
