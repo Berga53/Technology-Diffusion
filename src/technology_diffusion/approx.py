@@ -1,10 +1,11 @@
 from collections import deque
+import time
 from typing import Mapping
 
 import networkx as nx
 import numpy as np
 
-from .helpers import connected_component_spread, make_vector
+from .helpers import connected_component_spread, make_vector, time_exceeded
 
 
 def _threshold_levels(thetas: Mapping[int, int] | np.ndarray) -> list[int]:
@@ -18,15 +19,32 @@ def _threshold_levels(thetas: Mapping[int, int] | np.ndarray) -> list[int]:
 def _build_gamma_data(
     g: nx.Graph,
     thetas: Mapping[int, int] | np.ndarray,
-) -> tuple[list[int], list[list[int]], list[dict[int, int]]]:
+    start: float,
+    max_time: float | None,
+) -> tuple[list[int], list[list[int]], list[dict[int, int]], bool]:
     n_nodes = g.number_of_nodes()
     levels = _threshold_levels(thetas)
 
     comp_id_by_level: list[list[int]] = []
     comp_size_by_level: list[dict[int, int]] = []
+    timed_out = False
 
     for level in levels:
-        allowed_nodes = [v for v in g.nodes() if int(thetas[v]) <= level]
+        if time_exceeded(start, max_time):
+            timed_out = True
+            break
+
+        allowed_nodes: list[int] = []
+        for v in g.nodes():
+            if time_exceeded(start, max_time):
+                timed_out = True
+                break
+            if int(thetas[v]) <= level:
+                allowed_nodes.append(v)
+
+        if timed_out:
+            break
+
         subgraph = g.subgraph(allowed_nodes)
 
         comp_id = [-1] * n_nodes
@@ -34,16 +52,22 @@ def _build_gamma_data(
 
         component_id = 0
         for component in nx.connected_components(subgraph):
+            if time_exceeded(start, max_time):
+                timed_out = True
+                break
             component = list(component)
             for v in component:
                 comp_id[v] = component_id
             comp_size[component_id] = len(component)
             component_id += 1
 
+        if timed_out:
+            break
+
         comp_id_by_level.append(comp_id)
         comp_size_by_level.append(comp_size)
 
-    return levels, comp_id_by_level, comp_size_by_level
+    return levels, comp_id_by_level, comp_size_by_level, timed_out
 
 
 def _gamma_size(
@@ -120,12 +144,19 @@ def _greedy_seed_set(
     levels: list[int],
     comp_id_by_level: list[list[int]],
     comp_size_by_level: list[dict[int, int]],
-) -> set[int]:
+    start: float,
+    max_time: float | None,
+) -> tuple[set[int], bool]:
     seed_set: set[int] = set()
     target = _f_target(levels)
     remaining_nodes = set(g.nodes())
+    timed_out = False
 
     while _f_value(g, thetas, seed_set, levels, comp_id_by_level, comp_size_by_level) < target:
+        if time_exceeded(start, max_time):
+            timed_out = True
+            break
+
         best_node = None
         best_gain = -1
 
@@ -139,6 +170,10 @@ def _greedy_seed_set(
         )
 
         for node in remaining_nodes:
+            if time_exceeded(start, max_time):
+                timed_out = True
+                break
+
             new_value = _f_value(
                 g,
                 thetas,
@@ -159,18 +194,27 @@ def _greedy_seed_set(
         seed_set.add(best_node)
         remaining_nodes.remove(best_node)
 
-    return seed_set
+    return seed_set, timed_out
 
 
-def _shortest_path_to_set(g: nx.Graph, source: int, targets: set[int]) -> list[int]:
+def _shortest_path_to_set(
+    g: nx.Graph,
+    source: int,
+    targets: set[int],
+    start: float,
+    max_time: float | None,
+) -> tuple[list[int], bool]:
     if source in targets:
-        return [source]
+        return [source], False
 
     visited = {source}
     parent = {source: None}
     queue = deque([source])
 
     while queue:
+        if time_exceeded(start, max_time):
+            return [], True
+
         u = queue.popleft()
 
         if u in targets:
@@ -178,42 +222,77 @@ def _shortest_path_to_set(g: nx.Graph, source: int, targets: set[int]) -> list[i
             while u is not None:
                 path.append(u)
                 u = parent[u]
-            return path[::-1]
+            return path[::-1], False
 
         for w in g.neighbors(u):
+            if time_exceeded(start, max_time):
+                return [], True
             if w not in visited:
                 visited.add(w)
                 parent[w] = u
                 queue.append(w)
 
-    return []
+    return [], False
 
 
-def _connect_seed_set(g: nx.Graph, seed_set: set[int]) -> set[int]:
+def _connect_seed_set(
+    g: nx.Graph,
+    seed_set: set[int],
+    start: float,
+    max_time: float | None,
+) -> tuple[set[int], bool]:
     seeds = list(seed_set)
 
     if not seeds:
-        return set()
+        return set(), False
 
     connected_seed_set = {seeds[0]}
+    timed_out = False
 
     for node in seeds[1:]:
-        path = _shortest_path_to_set(g, node, connected_seed_set)
+        if time_exceeded(start, max_time):
+            timed_out = True
+            break
+
+        path, sp_timed_out = _shortest_path_to_set(g, node, connected_seed_set, start, max_time)
+        if sp_timed_out:
+            timed_out = True
+            break
         connected_seed_set.update(path)
 
-    return connected_seed_set
+    return connected_seed_set, timed_out
 
 
 def approx(
     g: nx.Graph,
     thetas: Mapping[int, int] | np.ndarray,
-) -> dict[str, object]:
-    
+    max_time: float | None = None,
+) -> tuple[int | None, np.ndarray | None, float, list[tuple[int | None, float]]]:
+    start = time.time()
     n_nodes = g.number_of_nodes()
-    levels, comp_id_by_level, comp_size_by_level = _build_gamma_data(g, thetas)
 
-    core_seed_set = _greedy_seed_set(g, thetas, levels, comp_id_by_level, comp_size_by_level)
-    seed_set = _connect_seed_set(g, core_seed_set)
+    levels, comp_id_by_level, comp_size_by_level, gamma_timed_out = _build_gamma_data(
+        g,
+        thetas,
+        start,
+        max_time,
+    )
+    if gamma_timed_out:
+        elapsed = round(float(time.time() - start), 4)
+        history = [(None, elapsed)]
+        return None, None, elapsed, history
+
+    core_seed_set, timed_out = _greedy_seed_set(
+        g,
+        thetas,
+        levels,
+        comp_id_by_level,
+        comp_size_by_level,
+        start,
+        max_time,
+    )
+    seed_set, connect_timed_out = _connect_seed_set(g, core_seed_set, start, max_time)
+    timed_out = timed_out or connect_timed_out
 
     final_x = make_vector(seed_set, n_nodes)
 
@@ -224,8 +303,15 @@ def approx(
     )
 
     k = len(seed_set)
+    elapsed = round(float(time.time() - start), 4)
+
+    if timed_out:
+        history = [(None, elapsed)]
+        return None, None, elapsed, history
 
     if spread == n_nodes:
-        return k, final_x
-    else:
-        return None, final_x
+        history = [(int(k), elapsed)]
+        return int(k), final_x, elapsed, history
+
+    history = [(None, elapsed)]
+    return None, None, elapsed, history
