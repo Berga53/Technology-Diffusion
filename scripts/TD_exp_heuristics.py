@@ -131,7 +131,7 @@ def main() -> None:
     print(f"Static params: {static_params_path}")
 
     results = []
-    start_all = time.time()
+    start_all = time.perf_counter()
     for run_idx, (n_nodes, c, seed) in enumerate(combinations, start=1):
         print("\n" + "=" * 90)
         print(
@@ -149,7 +149,7 @@ def main() -> None:
 
         for heuristic_fn in heuristics:
             h_name = heuristic_fn.__name__
-            h_start = time.time()
+            h_start = time.perf_counter()
             _, h_k, _ = technology_diffusion_heuristics(
                 g,
                 n_nodes,
@@ -157,7 +157,7 @@ def main() -> None:
                 connected=args.connected,
                 heuristic=heuristic_fn,
             )
-            h_runtime = round(time.time() - h_start, 4)
+            h_runtime = round(time.perf_counter() - h_start, 4)
 
             results.append(
                 [
@@ -174,7 +174,7 @@ def main() -> None:
 
             print(f"{h_name:<14} -> K={h_k}, runtime={round(float(h_runtime), 2)}s")
 
-    elapsed_all = time.time() - start_all
+    elapsed_all = time.perf_counter() - start_all
     columns = [
         "n_nodes",
         "c",

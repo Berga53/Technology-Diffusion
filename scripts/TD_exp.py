@@ -168,7 +168,7 @@ def main() -> None:
     print(f"Gurobi log: {gurobi_log_path}")
     print(f"Static params: {static_params_path}")
     results = []
-    start_all = time.time()
+    start_all = time.perf_counter()
     gurobi_env = configure_gurobi_env(args.save_gurobi_log, gurobi_log_path)
 
     try:
@@ -214,9 +214,9 @@ def main() -> None:
                 x = None
             else:
                 print("Building Goldberg-Liu IP...", end="", flush=True)
-                start = time.time()
+                start = time.perf_counter()
                 model, x = build_golberg_liu_ip(g, thetas, max_time, env=gurobi_env)
-                build_time = time.time() - start
+                build_time = time.perf_counter() - start
 
                 gl_history = [(n_nodes, 0.0)]
 
@@ -312,7 +312,7 @@ def main() -> None:
     finally:
         gurobi_env.dispose()
 
-    elapsed_all = time.time() - start_all
+    elapsed_all = time.perf_counter() - start_all
     columns = [
         "n_nodes",
         "c",

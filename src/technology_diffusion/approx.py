@@ -268,7 +268,7 @@ def approx(
     thetas: Mapping[int, int] | np.ndarray,
     max_time: float | None = None,
 ) -> tuple[int | None, np.ndarray | None, float, list[tuple[int | None, float]]]:
-    start = time.time()
+    start = time.perf_counter()
     n_nodes = g.number_of_nodes()
 
     levels, comp_id_by_level, comp_size_by_level, gamma_timed_out = _build_gamma_data(
@@ -278,7 +278,7 @@ def approx(
         max_time,
     )
     if gamma_timed_out:
-        elapsed = round(float(time.time() - start), 4)
+        elapsed = round(float(time.perf_counter() - start), 4)
         history = [(None, elapsed)]
         return None, None, elapsed, history
 
@@ -303,7 +303,7 @@ def approx(
     )
 
     k = len(seed_set)
-    elapsed = round(float(time.time() - start), 4)
+    elapsed = round(float(time.perf_counter() - start), 4)
 
     if timed_out:
         history = [(None, elapsed)]

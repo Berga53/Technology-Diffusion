@@ -21,7 +21,7 @@ def resume_print() -> None:
 
 
 def time_exceeded(start_time: float, max_time: Optional[float]) -> bool:
-    return max_time is not None and (time.time() - start_time) > max_time
+    return max_time is not None and (time.perf_counter() - start_time) > max_time
 
 
 def make_vector(init_seeds: Iterable[int], n_nodes: int) -> np.ndarray:

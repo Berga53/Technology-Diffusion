@@ -15,7 +15,7 @@ def build_golberg_liu_ip(
     max_time: Optional[float] = None,
     env: Optional[gp.Env] = None,
 ) -> tuple[Any | None, Any | None]:
-    start_time = time.time()
+    start_time = time.perf_counter()
     v = list(g.nodes())
     n = len(v)
     t_range = range(1, n + 1)
@@ -86,7 +86,7 @@ def build_exact_ip(
     max_time: Optional[float] = None,
     env: Optional[gp.Env] = None,
 ) -> tuple[Any | None, Any | None, Any | None, Any | None]:
-    start_time = time.time()
+    start_time = time.perf_counter()
     v = list(g.nodes())
     n_nodes = len(v)
     if time_horizon is None:

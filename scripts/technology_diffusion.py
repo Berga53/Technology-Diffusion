@@ -230,10 +230,10 @@ def run_goldberg_liu(
         )
         return None, None, None
 
-    gl_start = time.time()
+    gl_start = time.perf_counter()
     print("Building Goldberg-Liu IP...", end="", flush=True)
     model, _ = build_golberg_liu_ip(g, thetas, max_time, env=gurobi_env)
-    build_time = time.time() - gl_start
+    build_time = time.perf_counter() - gl_start
 
     if model is None:
         print(
@@ -279,7 +279,7 @@ def run_goldberg_liu(
 
     if model.SolCount > 0:
         gl_k = int(round(model.objVal))
-        total_time = round(float(time.time() - gl_start), 4)
+        total_time = round(float(time.perf_counter() - gl_start), 4)
         gl_history.append([gl_k, total_time])
         print_algorithm_line(
             "goldberg_liu",
@@ -313,7 +313,7 @@ def main() -> None:
     print(f"Static params: {static_params_path}")
 
     results = []
-    start_all = time.time()
+    start_all = time.perf_counter()
     gurobi_env = configure_gurobi_env(args.save_gurobi_log, gurobi_log_path)
 
     try:
@@ -440,7 +440,7 @@ def main() -> None:
     finally:
         gurobi_env.dispose()
 
-    elapsed_all = time.time() - start_all
+    elapsed_all = time.perf_counter() - start_all
     columns = [
         "algorithm",
         "n_nodes",

@@ -272,7 +272,7 @@ def main() -> None:
     print(f"Static params: {static_params_path}")
 
     results = []
-    start_all = time.time()
+    start_all = time.perf_counter()
     gurobi_env = configure_gurobi_env(args.save_gurobi_log, gurobi_log_path)
 
     try:
@@ -338,9 +338,9 @@ def main() -> None:
                 )
             else:
                 print("Building Goldberg-Liu IP...", end="", flush=True)
-                gl_build_start = time.time()
+                gl_build_start = time.perf_counter()
                 gl_model, gl_x = build_golberg_liu_ip(g, thetas, max_time, env=gurobi_env)
-                build_time = time.time() - gl_build_start
+                build_time = time.perf_counter() - gl_build_start
 
                 gl_history = [(n_nodes, 0.0)]
 
@@ -423,7 +423,7 @@ def main() -> None:
                 )
             else:
                 print("Building Exact IP...", end="", flush=True)
-                exact_build_start = time.time()
+                exact_build_start = time.perf_counter()
                 exact_model, exact_x, exact_y, exact_n = build_exact_ip(
                     g,
                     thetas,
@@ -433,7 +433,7 @@ def main() -> None:
                     max_time=max_time,
                     env=gurobi_env,
                 )
-                exact_build_elapsed = time.time() - exact_build_start
+                exact_build_elapsed = time.perf_counter() - exact_build_start
 
                 if exact_model is None or max_time - exact_build_elapsed < 0:
                     print(
@@ -541,7 +541,7 @@ def main() -> None:
     finally:
         gurobi_env.dispose()
 
-    elapsed_all = time.time() - start_all
+    elapsed_all = time.perf_counter() - start_all
     columns = [
         "algorithm",
         "n_nodes",

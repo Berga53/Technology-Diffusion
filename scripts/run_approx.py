@@ -153,7 +153,7 @@ def main() -> None:
 	print(f"Static params: {static_params_path}")
 
 	results = []
-	start_all = time.time()
+	start_all = time.perf_counter()
 
 	for run_idx, (n_nodes, c, seed) in enumerate(combinations, start=1):
 		print("\n" + "=" * 90)
@@ -194,7 +194,7 @@ def main() -> None:
 			format_k_time(int(approx_k) if approx_k is not None else None, approx_runtime),
 		)
 
-	elapsed_all = time.time() - start_all
+	elapsed_all = time.perf_counter() - start_all
 	columns = [
 		"algorithm",
 		"n_nodes",

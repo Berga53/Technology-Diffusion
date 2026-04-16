@@ -184,7 +184,7 @@ def technology_diffusion_heuristics(
     if n_nodes <= 0:
         return np.zeros(n_nodes), 0, [(0, 0.0)]
 
-    start = time.time()
+    start = time.perf_counter()
     history: list[tuple[int, float]] = [(n_nodes, 0.0)]
 
     def evaluate(k: int) -> tuple[np.ndarray, int, np.ndarray]:
@@ -209,7 +209,7 @@ def technology_diffusion_heuristics(
             if best_k is None or k < best_k:
                 best_k = k
                 best_solution_x = np.array(x_k, dtype=float, copy=True)
-                history.append((best_k, round(time.time() - start, 4)))
+                history.append((best_k, round(time.perf_counter() - start, 4)))
             top_k = k - 1
         else:
             inferred_success_k = k + (n_nodes - spread_k)
@@ -218,11 +218,11 @@ def technology_diffusion_heuristics(
                 inferred_x[np.where(active_after == 0)[0]] = 1.0
                 best_k = inferred_success_k
                 best_solution_x = inferred_x
-                history.append((best_k, round(time.time() - start, 4)))
+                history.append((best_k, round(time.perf_counter() - start, 4)))
 
             if inferred_success_k <= top_k:
                 top_k = inferred_success_k - 1
             bottom_k = k + 1
 
-    history.append((int(best_k), round(time.time() - start, 4)))
-    return best_solution_x, int(best_k), round(float(time.time() - start), 4), history
+    history.append((int(best_k), round(time.perf_counter() - start, 4)))
+    return best_solution_x, int(best_k), round(float(time.perf_counter() - start), 4), history

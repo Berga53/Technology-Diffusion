@@ -48,14 +48,14 @@ def _print_nads_status(
     if done:
         print(
             "\r"
-            + f"Neighbors search... Done! Calls:{calls}. Time: {round(time.time()-start)}/{max_time} s. "
+            + f"Neighbors search... Done! Calls:{calls}. Time: {round(time.perf_counter()-start)}/{max_time} s. "
             + f"Influence spread: {spread}."
             + " " * 20
         )
     else:
         print(
             "\r"
-            + f"Neighbors search... Calls:{calls}. Time: {round(time.time()-start)}/{max_time} s. "
+            + f"Neighbors search... Calls:{calls}. Time: {round(time.perf_counter()-start)}/{max_time} s. "
             + f"Influence spread: {spread}."
             + " " * 20,
             end="",
@@ -128,7 +128,7 @@ def _evaluate_neighbors(
         _print_nads_status(verbose, calls, start, max_time, s_elem, done=False)
 
         if s_elem > s_temp:
-            history.append([s_elem, time.time() - start, calls])
+            history.append([s_elem, time.perf_counter() - start, calls])
             x_temp = x_elem
             s_temp = s_elem
 
@@ -315,7 +315,7 @@ def _mg_phase(
                 _print_nads_status(verbose, calls, start, max_time, s_prov, done=False)
 
                 if s_prov > s_temp:
-                    history.append([s_prov, time.time() - start, calls])
+                    history.append([s_prov, time.perf_counter() - start, calls])
                     x_temp = x_prov
                     s_temp = s_prov
                     improved_mg = True
@@ -360,8 +360,8 @@ def NaDS_td(
     stop = False
     buffer = collections.deque(maxlen=buffer_dim)
     calls = 1
-    start = time.time()
-    history = [[s_hist[-1], time.time() - start, calls]]
+    start = time.perf_counter()
+    history = [[s_hist[-1], time.perf_counter() - start, calls]]
 
     _print_nads_status(verbose, calls, start, max_time, s_hist[-1], done=False)
 
@@ -494,7 +494,7 @@ def NaDS_td(
         elif s_hist[-1] <= (1 + xi_t) * s_hist[-2]:
             xi_t = xi_t * delta
 
-    history.append([s_hist[-1], time.time() - start, calls])
+    history.append([s_hist[-1], time.perf_counter() - start, calls])
     _print_nads_status(verbose, calls, start, max_time, s_hist[-1], done=True)
     return s_hist, x_hist, history
 
@@ -511,20 +511,20 @@ def _print_binary_search_status(
     if done:
         print(
             "\r"
-            + f"Binary search... Done! k:{best_k}. Time: {round(time.time()-start)}/{max_time} s. "
+            + f"Binary search... Done! k:{best_k}. Time: {round(time.perf_counter()-start)}/{max_time} s. "
             + " " * 20
         )
     else:
         print(
             "\r"
-            + f"Binary search... best k:{best_k}. Trying {k}. Time: {round(time.time()-start)}/{max_time} s. "
+            + f"Binary search... best k:{best_k}. Trying {k}. Time: {round(time.perf_counter()-start)}/{max_time} s. "
             + " " * 20,
             end="",
         )
 
 
 def _remaining_time(start: float, max_time: float) -> float:
-    return max(0.0, float(max_time) - (time.time() - start))
+    return max(0.0, float(max_time) - (time.perf_counter() - start))
 
 
 def _rank_heuristics(
@@ -563,7 +563,7 @@ def _rank_heuristics(
                 heuristic=fn,
             )
             k_h = int(k_h)
-            scored.append((k_h, time.time() - start, fn))
+            scored.append((k_h, time.perf_counter() - start, fn))
 
             if best_k is None or k_h < best_k:
                 best_k = k_h
@@ -594,7 +594,7 @@ def NaDS_technology_diffusion_binary_search(
     verbose: int = 0,
 ) -> tuple[int | None, np.ndarray | None, float, list[tuple[int, float]]]:
 
-    start = time.time()
+    start = time.perf_counter()
     n_nodes = g.number_of_nodes()
     strategy_order, top_k, best_k, best_solution_x = _rank_heuristics(
         g,
@@ -612,9 +612,9 @@ def NaDS_technology_diffusion_binary_search(
     history = [(n_nodes, 0.0)]
     last_tested_k = int(best_k) if best_k is not None else n_nodes
     if top_k < n_nodes:
-        history.append((top_k, round(time.time() - start, 4)))
+        history.append((top_k, round(time.perf_counter() - start, 4)))
 
-    while bottom_k <= top_k and time.time() - start < max_time:
+    while bottom_k <= top_k and time.perf_counter() - start < max_time:
         k = (top_k + bottom_k) // 2
         last_tested_k = k
         if k in tried_k:
@@ -662,7 +662,7 @@ def NaDS_technology_diffusion_binary_search(
             if best_k is None or k < best_k:
                 best_k = k
                 best_solution_x = x_last.copy()
-                history.append((best_k, round(time.time() - start, 4)))
+                history.append((best_k, round(time.perf_counter() - start, 4)))
             top_k = k - 1
         else:
             inferred_success_k = k + (n_nodes - spread)
@@ -674,13 +674,13 @@ def NaDS_technology_diffusion_binary_search(
                 inferred_x[np.where(active_after == 0)[0]] = 1.0
                 best_k = inferred_success_k
                 best_solution_x = inferred_x
-                history.append((best_k, round(time.time() - start, 4)))
+                history.append((best_k, round(time.perf_counter() - start, 4)))
             if inferred_success_k <= top_k:
                 top_k = inferred_success_k - 1
             bottom_k = k + 1
 
     random.seed(42)
-    while time.time() - start < max_time and best_k is not None and best_k > 1:
+    while time.perf_counter() - start < max_time and best_k is not None and best_k > 1:
         k = best_k - 1
         last_tested_k = k
 
@@ -725,11 +725,11 @@ def NaDS_technology_diffusion_binary_search(
         if s[-1] == n_nodes:
             best_k = k
             best_solution_x = np.array(final_x[-1], dtype=float)
-            history.append((best_k, round(time.time() - start, 4)))
+            history.append((best_k, round(time.perf_counter() - start, 4)))
         else:
             continue
     
-    history.append((best_k, round(time.time() - start, 4)))
+    history.append((best_k, round(time.perf_counter() - start, 4)))
     _print_binary_search_status(verbose, last_tested_k, best_k, start, max_time, done=True)
 
-    return best_k, best_solution_x, round(float(time.time() - start), 4), history
+    return best_k, best_solution_x, round(float(time.perf_counter() - start), 4), history
