@@ -68,7 +68,7 @@ def create_pa_graph(
             g.add_edge(u, int(v))
 
     k_max = int(np.ceil(n_nodes / c))
-    values = list(range(max(2, c), k_max * c + 1, c))
+    values = list(range(max(2, c), min(k_max * c, n_nodes) + 1, c))
     theta = {v: int(rng_theta.choice(values)) for v in g.nodes()}
     nx.set_node_attributes(g, theta, name="theta")
     return g, theta
