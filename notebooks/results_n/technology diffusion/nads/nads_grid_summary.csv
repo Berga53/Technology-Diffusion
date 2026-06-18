@@ -1,0 +1,4 @@
+algorithm,mean_k,mean_spread_ratio,mean_runtime_s,mean_wall_s,n_runs
+NaDS_v1,96.0,1.0,1501.84085,1501.8408770002425,4
+NaDS_v2_skip_mg,100.0,1.0,1515.372975,1515.3737670627306,4
+NaDS_v2,104.25,1.0,1516.5022,1516.502736499766,4

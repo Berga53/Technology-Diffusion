@@ -29,8 +29,8 @@ from technology_diffusion import (
     high_thetas,
     random_start,
     technology_diffusion_heuristics,
+    approx
 )
-from technology_diffusion.approx import approx
 
 DEFAULT_C_LIST = [1, 5, 10, 20]
 DEFAULT_N_LIST = [200, 400, 600, 1000, 2000]
